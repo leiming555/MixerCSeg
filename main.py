@@ -1,5 +1,4 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import argparse
 import datetime
 import random
@@ -29,6 +28,8 @@ def get_args_parser():
                         help='Weight ratio for Dice Loss (0.0-1.0), should sum to 1 with BCELoss_ratio')
     parser.add_argument('--Norm_Type', default='GN', type=str,
                         help='Normalization layer type [GN|BN], GN=GroupNorm')
+    parser.add_argument('--nbins', default=36, type=int,
+                        help='Number of direction intervals used by DEGConv')
     parser.add_argument('--dataset_path', default="/home/linux/code/sod/dataset/CrackMap",
                         help='Root directory path for dataset')
     parser.add_argument('--batch_size_train', type=int, default=1,

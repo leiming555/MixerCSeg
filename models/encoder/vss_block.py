@@ -16,7 +16,7 @@ from VMamba.models.vmamba import TransMixer
 
 
 class VSS(nn.Module):
-    def __init__(self, in_dim, depth, mlp_ratio=4., state_dim=64):
+    def __init__(self, in_dim, depth, mlp_ratio=4., state_dim=64, nbins=36):
         super().__init__()
         self.depth = depth
         self.blocks = nn.ModuleList()
@@ -25,7 +25,7 @@ class VSS(nn.Module):
                 TransMixer(hidden_dim=in_dim, ssm_d_state=state_dim, mlp_ratio=mlp_ratio, channel_first=True),
                 HoGEdgeGateConv(
                             in_dim=in_dim,
-                            nbins=36
+                            nbins=nbins
                 )
             )
             self.blocks.append(block)
@@ -43,6 +43,7 @@ class VSSEncoder(nn.Module):
                  mlp_ratio=4.,
                  state_dim=[49,25,9], distillation=False,
                  is_patch_embed=True,
+                 nbins=36,
                  ):
         super().__init__()
         self.num_layers = len(depths)
@@ -59,7 +60,8 @@ class VSSEncoder(nn.Module):
             vss = VSS(in_dim=int(embed_dim[i_layer]),
                       depth=depths[i_layer],
                       mlp_ratio=mlp_ratio,
-                      state_dim = state_dim[i_layer])
+                      state_dim = state_dim[i_layer],
+                      nbins=nbins)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:
@@ -140,6 +142,5 @@ class VSSEncoder(nn.Module):
 
         return outs
     
-
 
 

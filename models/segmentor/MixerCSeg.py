@@ -62,6 +62,7 @@ def build_MixerCSeg(args):
         depths=depths,
         mlp_ratio=2.,
         state_dim=state_dim,
+        nbins=getattr(args, 'nbins', 36),
         )
     model = MixerCSeg(backbone, embed_dim, args).to(device)
 
@@ -69,4 +70,3 @@ def build_MixerCSeg(args):
     criterion.to(device)
     
     return model, criterion
-
