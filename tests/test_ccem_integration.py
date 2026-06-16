@@ -43,7 +43,7 @@ def test_encoder_outputs_feed_srf_then_segmentation_head():
 
     assert "outs = self.backbone(samples)" in segmentor_source
     assert "out = self.decoder(outs)" in segmentor_source
-    assert "self.brm = BoundaryRefinementModule(channels=mid_dim)" in decoder_source
+    assert "self.brm = BoundaryRefinementModuleV2(channels=mid_dim)" in decoder_source
     assert decoder_source.index("x = self.brm(x)") < decoder_source.index(
         "x = self.linear_pred(x)"
     )
