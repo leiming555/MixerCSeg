@@ -5,7 +5,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_encoder_block_orders_transmixer_degconv_ccem():
+def test_encoder_block_orders_transmixer_degconv_enhancement():
     source = (PROJECT_ROOT / "models/encoder/vss_block.py").read_text()
     tree = ast.parse(source)
 
@@ -31,8 +31,18 @@ def test_encoder_block_orders_transmixer_degconv_ccem():
     assert module_names == [
         "TransMixer",
         "HoGEdgeGateConv",
-        "CrackContinuityEnhancementModule",
+        "enhancement_module",
     ]
+
+
+def test_encoder_routes_ccem_to_f1_f2_and_mscm_to_f3_f4():
+    source = (PROJECT_ROOT / "models/encoder/vss_block.py").read_text()
+
+    assert "from models.mscm import MultiScaleContextModule" in source
+    assert "if i_layer < 2" in source
+    assert "CrackContinuityEnhancementModule" in source
+    assert "MultiScaleContextModule" in source
+    assert "enhancement_module=enhancement_module" in source
 
 
 def test_encoder_outputs_feed_srf_then_segmentation_head():
@@ -43,8 +53,6 @@ def test_encoder_outputs_feed_srf_then_segmentation_head():
 
     assert "outs = self.backbone(samples)" in segmentor_source
     assert "out = self.decoder(outs)" in segmentor_source
-    assert "self.brm = BoundaryRefinementModuleV2(channels=mid_dim)" in decoder_source
-    assert decoder_source.index("x = self.brm(x)") < decoder_source.index(
-        "x = self.linear_pred(x)"
-    )
+    assert "BoundaryRefinementModule" not in decoder_source
+    assert "x = self.brm(x)" not in decoder_source
     assert "x = self.linear_pred(x)" in decoder_source

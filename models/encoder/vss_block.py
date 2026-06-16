@@ -11,13 +11,22 @@ from torch.nn.modules.batchnorm import _BatchNorm
 from models.utils import LayerNorm1D, LayerNorm2D, FFN, Stem, PatchMerging
 from models.layers import HoGEdgeGateConv
 from models.ccem import CrackContinuityEnhancementModule
+from models.mscm import MultiScaleContextModule
 
 from VMamba.models.vmamba import TransMixer
 
 
 
 class VSS(nn.Module):
-    def __init__(self, in_dim, depth, mlp_ratio=4., state_dim=64, nbins=36):
+    def __init__(
+        self,
+        in_dim,
+        depth,
+        mlp_ratio=4.,
+        state_dim=64,
+        nbins=36,
+        enhancement_module=CrackContinuityEnhancementModule,
+    ):
         super().__init__()
         self.depth = depth
         self.blocks = nn.ModuleList()
@@ -28,7 +37,7 @@ class VSS(nn.Module):
                             in_dim=in_dim,
                             nbins=nbins
                 ),
-                CrackContinuityEnhancementModule(channels=in_dim)
+                enhancement_module(channels=in_dim)
             )
             self.blocks.append(block)
 
@@ -59,11 +68,18 @@ class VSSEncoder(nn.Module):
         self.downsamples = nn.ModuleList()
         for i_layer in range(self.num_layers):
 
+            enhancement_module = (
+                CrackContinuityEnhancementModule
+                if i_layer < 2
+                else MultiScaleContextModule
+            )
+
             vss = VSS(in_dim=int(embed_dim[i_layer]),
                       depth=depths[i_layer],
                       mlp_ratio=mlp_ratio,
                       state_dim = state_dim[i_layer],
-                      nbins=nbins)
+                      nbins=nbins,
+                      enhancement_module=enhancement_module)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:
@@ -144,4 +160,3 @@ class VSSEncoder(nn.Module):
 
         return outs
     
-
