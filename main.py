@@ -26,6 +26,14 @@ def get_args_parser():
                         help='Weight ratio for Binary Cross Entropy Loss (0.0-1.0), should sum to 1 with DiceLoss_ratio')
     parser.add_argument('--DiceLoss_ratio', default=0.13, type=float,
                         help='Weight ratio for Dice Loss (0.0-1.0), should sum to 1 with BCELoss_ratio')
+    parser.add_argument('--use_boundary_loss', action='store_true',
+                        help='Enable BCE + Dice + Boundary training loss')
+    parser.add_argument('--lambda_boundary', default=0.3, type=float,
+                        help='Weight for Boundary Loss')
+    parser.add_argument('--loss_warmup_epochs', default=0, type=int,
+                        help='Number of initial epochs without Boundary Loss')
+    parser.add_argument('--eps', default=1e-6, type=float,
+                        help='Numerical stability epsilon for auxiliary losses')
     parser.add_argument('--Norm_Type', default='GN', type=str,
                         help='Normalization layer type [GN|BN], GN=GroupNorm')
     parser.add_argument('--nbins', default=36, type=int,
@@ -103,6 +111,17 @@ def main(args):
     random.seed(seed)
 
     model, criterion = build_model(args)
+    test_criterion = criterion
+    if args.use_boundary_loss:
+        from losses import CompositeCrackLoss
+        criterion = CompositeCrackLoss(
+            bce_weight=args.BCELoss_ratio,
+            dice_weight=args.DiceLoss_ratio,
+            use_boundary=True,
+            lambda_boundary=args.lambda_boundary,
+            loss_warmup_epochs=args.loss_warmup_epochs,
+            eps=args.eps,
+        ).to(device)
     model.to(device)
     args.batch_size = args.batch_size_train
     train_dataLoader = create_dataset(args)
@@ -182,7 +201,7 @@ def main(args):
                 if device != 'cpu':
                     x, target = x.cuda(), target.to(dtype=torch.int64).cuda()
                 out = model(x)
-                loss = criterion(out, target.float())
+                loss = test_criterion(out, target.float())
                 target = target[0, 0, ...].cpu().numpy()
                 out = out[0, 0, ...].cpu().numpy()
                 root_name = data["A_paths"][0].split("/")[-1][0:-4]

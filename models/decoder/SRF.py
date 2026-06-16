@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
+from models.brm import BoundaryRefinementModule
 
 
 
@@ -90,6 +91,8 @@ class SRFModule(nn.Module):
             nn.ReLU()
         )
 
+        self.brm = BoundaryRefinementModule(channels=mid_dim)
+
 
         self.linear_pred = nn.Sequential(
             nn.Conv2d(mid_dim, mid_dim//4, 1),
@@ -122,9 +125,9 @@ class SRFModule(nn.Module):
 
         x = self.block(torch.cat([x1,x2,x3,x4], dim=1))   # [1, 8, 512, 512]
         # x = torch.cat([x1+res, x2+res, x3+res, x4+res], dim=1)
+        x = self.brm(x)
         x = self.linear_pred(x)
 
         return x
     
-
 

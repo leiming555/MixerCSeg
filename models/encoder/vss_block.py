@@ -10,6 +10,7 @@ from torch.nn.modules.batchnorm import _BatchNorm
 
 from models.utils import LayerNorm1D, LayerNorm2D, FFN, Stem, PatchMerging
 from models.layers import HoGEdgeGateConv
+from models.ccem import CrackContinuityEnhancementModule
 
 from VMamba.models.vmamba import TransMixer
 
@@ -26,7 +27,8 @@ class VSS(nn.Module):
                 HoGEdgeGateConv(
                             in_dim=in_dim,
                             nbins=nbins
-                )
+                ),
+                CrackContinuityEnhancementModule(channels=in_dim)
             )
             self.blocks.append(block)
 
@@ -142,5 +144,4 @@ class VSSEncoder(nn.Module):
 
         return outs
     
-
 
