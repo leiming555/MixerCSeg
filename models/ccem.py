@@ -83,8 +83,18 @@ class CrackContinuityEnhancementModule(nn.Module):
         strip_kernel: int = 7,
         dilation: int = 2,
         min_hidden_channels: int = 16,
+        mode: str = "full",
     ):
         super().__init__()
+
+        valid_modes = {"full", "no_local", "no_strip", "no_dilation", "no_gate"}
+        if mode not in valid_modes:
+            raise ValueError(f"Unsupported CCEM mode: {mode}. Expected one of {sorted(valid_modes)}.")
+        self.mode = mode
+        self.use_local = mode != "no_local"
+        self.use_strip = mode != "no_strip"
+        self.use_dilation = mode != "no_dilation"
+        self.use_gate = mode != "no_gate"
 
         hidden_channels = max(channels // reduction, min_hidden_channels)
 
@@ -99,60 +109,65 @@ class CrackContinuityEnhancementModule(nn.Module):
             act=True,
         )
 
-        # Branch 1: local edge/detail branch
-        self.local_branch = ConvGNAct(
-            in_channels=hidden_channels,
-            out_channels=hidden_channels,
-            kernel_size=3,
-            padding=1,
-            groups=hidden_channels,
-            act=True,
-        )
+        if self.use_local:
+            # Branch 1: local edge/detail branch
+            self.local_branch = ConvGNAct(
+                in_channels=hidden_channels,
+                out_channels=hidden_channels,
+                kernel_size=3,
+                padding=1,
+                groups=hidden_channels,
+                act=True,
+            )
 
-        # Branch 2: strip convolution branch for elongated cracks
-        self.strip_h = ConvGNAct(
-            in_channels=hidden_channels,
-            out_channels=hidden_channels,
-            kernel_size=(1, strip_kernel),
-            padding=(0, strip_kernel // 2),
-            groups=hidden_channels,
-            act=True,
-        )
+        if self.use_strip:
+            # Branch 2: strip convolution branch for elongated cracks
+            self.strip_h = ConvGNAct(
+                in_channels=hidden_channels,
+                out_channels=hidden_channels,
+                kernel_size=(1, strip_kernel),
+                padding=(0, strip_kernel // 2),
+                groups=hidden_channels,
+                act=True,
+            )
 
-        self.strip_v = ConvGNAct(
-            in_channels=hidden_channels,
-            out_channels=hidden_channels,
-            kernel_size=(strip_kernel, 1),
-            padding=(strip_kernel // 2, 0),
-            groups=hidden_channels,
-            act=True,
-        )
+            self.strip_v = ConvGNAct(
+                in_channels=hidden_channels,
+                out_channels=hidden_channels,
+                kernel_size=(strip_kernel, 1),
+                padding=(strip_kernel // 2, 0),
+                groups=hidden_channels,
+                act=True,
+            )
 
-        # Branch 3: dilated branch for bridging small crack gaps
-        self.dilation_branch = ConvGNAct(
-            in_channels=hidden_channels,
-            out_channels=hidden_channels,
-            kernel_size=3,
-            padding=dilation,
-            dilation=dilation,
-            groups=hidden_channels,
-            act=True,
-        )
+        if self.use_dilation:
+            # Branch 3: dilated branch for bridging small crack gaps
+            self.dilation_branch = ConvGNAct(
+                in_channels=hidden_channels,
+                out_channels=hidden_channels,
+                kernel_size=3,
+                padding=dilation,
+                dilation=dilation,
+                groups=hidden_channels,
+                act=True,
+            )
 
         # Fuse all branches
+        branch_count = int(self.use_local) + int(self.use_strip) * 2 + int(self.use_dilation)
         self.fuse = ConvGNAct(
-            in_channels=hidden_channels * 4,
+            in_channels=hidden_channels * branch_count,
             out_channels=channels,
             kernel_size=1,
             padding=0,
             act=False,
         )
 
-        # Gate: decide where crack-continuity features should be enhanced
-        self.gate = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, bias=True),
-            nn.Sigmoid(),
-        )
+        if self.use_gate:
+            # Gate: decide where crack-continuity features should be enhanced
+            self.gate = nn.Sequential(
+                nn.Conv2d(channels, channels, kernel_size=1, bias=True),
+                nn.Sigmoid(),
+            )
 
         # Learnable residual scale.
         # Initialized as 0 to avoid destroying pretrained/original features at the beginning.
@@ -163,22 +178,25 @@ class CrackContinuityEnhancementModule(nn.Module):
 
         x_reduced = self.reduce(x)
 
-        local_feat = self.local_branch(x_reduced)
+        branch_feats = []
 
-        strip_h_feat = self.strip_h(x_reduced)
-        strip_v_feat = self.strip_v(x_reduced)
+        if self.use_local:
+            branch_feats.append(self.local_branch(x_reduced))
 
-        dilation_feat = self.dilation_branch(x_reduced)
+        if self.use_strip:
+            branch_feats.append(self.strip_h(x_reduced))
+            branch_feats.append(self.strip_v(x_reduced))
 
-        fused = torch.cat(
-            [local_feat, strip_h_feat, strip_v_feat, dilation_feat],
-            dim=1,
-        )
+        if self.use_dilation:
+            branch_feats.append(self.dilation_branch(x_reduced))
+
+        fused = torch.cat(branch_feats, dim=1)
 
         fused = self.fuse(fused)
 
-        gate = self.gate(fused)
+        if self.use_gate:
+            fused = self.gate(fused) * fused
 
-        out = identity + self.gamma * gate * fused
+        out = identity + self.gamma * fused
 
         return out

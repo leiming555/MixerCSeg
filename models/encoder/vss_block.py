@@ -11,7 +11,6 @@ from torch.nn.modules.batchnorm import _BatchNorm
 from models.utils import LayerNorm1D, LayerNorm2D, FFN, Stem, PatchMerging
 from models.layers import HoGEdgeGateConv
 from models.ccem import CrackContinuityEnhancementModule
-from models.mscm import MultiScaleContextModule
 
 from VMamba.models.vmamba import TransMixer
 
@@ -25,20 +24,23 @@ class VSS(nn.Module):
         mlp_ratio=4.,
         state_dim=64,
         nbins=36,
-        enhancement_module=CrackContinuityEnhancementModule,
+        use_ccem=False,
+        ccem_mode="full",
     ):
         super().__init__()
         self.depth = depth
         self.blocks = nn.ModuleList()
         for _ in range(depth):
-            block = nn.Sequential(
+            layers = [
                 TransMixer(hidden_dim=in_dim, ssm_d_state=state_dim, mlp_ratio=mlp_ratio, channel_first=True),
                 HoGEdgeGateConv(
                             in_dim=in_dim,
                             nbins=nbins
-                ),
-                enhancement_module(channels=in_dim)
-            )
+                )
+            ]
+            if use_ccem:
+                layers.append(CrackContinuityEnhancementModule(channels=in_dim, mode=ccem_mode))
+            block = nn.Sequential(*layers)
             self.blocks.append(block)
 
     def forward(self, x):
@@ -55,6 +57,8 @@ class VSSEncoder(nn.Module):
                  state_dim=[49,25,9], distillation=False,
                  is_patch_embed=True,
                  nbins=36,
+                 use_ccem=False,
+                 ccem_mode="full",
                  ):
         super().__init__()
         self.num_layers = len(depths)
@@ -68,18 +72,13 @@ class VSSEncoder(nn.Module):
         self.downsamples = nn.ModuleList()
         for i_layer in range(self.num_layers):
 
-            enhancement_module = (
-                CrackContinuityEnhancementModule
-                if i_layer < 2
-                else MultiScaleContextModule
-            )
-
             vss = VSS(in_dim=int(embed_dim[i_layer]),
                       depth=depths[i_layer],
                       mlp_ratio=mlp_ratio,
                       state_dim = state_dim[i_layer],
                       nbins=nbins,
-                      enhancement_module=enhancement_module)
+                      use_ccem=use_ccem,
+                      ccem_mode=ccem_mode)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:

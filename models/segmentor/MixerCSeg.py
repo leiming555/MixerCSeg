@@ -63,6 +63,8 @@ def build_MixerCSeg(args):
         mlp_ratio=2.,
         state_dim=state_dim,
         nbins=getattr(args, 'nbins', 36),
+        use_ccem=getattr(args, 'use_ccem', False),
+        ccem_mode=getattr(args, 'ccem_mode', 'full'),
         )
     model = MixerCSeg(backbone, embed_dim, args).to(device)
 

@@ -4,6 +4,7 @@ import torch
 import time
 from tqdm import tqdm
 
+
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                      epoch: int, args = None, logger = None, writer=None):
@@ -57,4 +58,3 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         # writer.add_scalar("Loss/train", loss_final.item(), global_step)
 
     pbar.close()
-

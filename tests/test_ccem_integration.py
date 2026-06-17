@@ -1,11 +1,22 @@
 import ast
 from pathlib import Path
+import torch
 
+from models.ccem import CrackContinuityEnhancementModule
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_encoder_block_orders_transmixer_degconv_enhancement():
+def test_ccem_modes_preserve_shape():
+    x = torch.randn(1, 16, 16, 16)
+
+    for mode in ["full", "no_local", "no_strip", "no_dilation", "no_gate"]:
+        module = CrackContinuityEnhancementModule(channels=16, mode=mode)
+        y = module(x)
+        assert y.shape == x.shape
+
+
+def test_encoder_optionally_adds_ccem_after_degconv():
     source = (PROJECT_ROOT / "models/encoder/vss_block.py").read_text()
     tree = ast.parse(source)
 
@@ -22,27 +33,22 @@ def test_encoder_block_orders_transmixer_degconv_enhancement():
         and node.func.attr == "Sequential"
     )
 
-    module_names = [
-        arg.func.id
-        for arg in sequential.args
-        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
-    ]
-
-    assert module_names == [
-        "TransMixer",
-        "HoGEdgeGateConv",
-        "enhancement_module",
-    ]
+    assert any(isinstance(arg, ast.Starred) for arg in sequential.args)
+    assert "if use_ccem:" in source
+    assert "CrackContinuityEnhancementModule(channels=in_dim, mode=ccem_mode)" in source
 
 
-def test_encoder_routes_ccem_to_f1_f2_and_mscm_to_f3_f4():
+def test_encoder_passes_ccem_flags_from_args():
     source = (PROJECT_ROOT / "models/encoder/vss_block.py").read_text()
+    segmentor_source = (
+        PROJECT_ROOT / "models/segmentor/MixerCSeg.py"
+    ).read_text()
 
-    assert "from models.mscm import MultiScaleContextModule" in source
-    assert "if i_layer < 2" in source
-    assert "CrackContinuityEnhancementModule" in source
-    assert "MultiScaleContextModule" in source
-    assert "enhancement_module=enhancement_module" in source
+    assert "use_ccem=use_ccem" in source
+    assert "ccem_mode=ccem_mode" in source
+    assert "use_ccem=getattr(args, 'use_ccem', False)" in segmentor_source
+    assert "ccem_mode=getattr(args, 'ccem_mode', 'full')" in segmentor_source
+    assert "MultiScaleContextModule" not in source
 
 
 def test_encoder_outputs_feed_srf_then_segmentation_head():
@@ -55,4 +61,5 @@ def test_encoder_outputs_feed_srf_then_segmentation_head():
     assert "out = self.decoder(outs)" in segmentor_source
     assert "BoundaryRefinementModule" not in decoder_source
     assert "x = self.brm(x)" not in decoder_source
+    assert "SkeletonGuidanceHead" not in decoder_source
     assert "x = self.linear_pred(x)" in decoder_source

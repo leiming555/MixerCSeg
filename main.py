@@ -38,6 +38,11 @@ def get_args_parser():
                         help='Normalization layer type [GN|BN], GN=GroupNorm')
     parser.add_argument('--nbins', default=36, type=int,
                         help='Number of direction intervals used by DEGConv')
+    parser.add_argument('--use_ccem', action='store_true',
+                        help='Enable CCEM after DEGConv in every encoder stage')
+    parser.add_argument('--ccem_mode', default='full', type=str,
+                        choices=['full', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
+                        help='CCEM ablation mode')
     parser.add_argument('--dataset_path', default="/home/linux/code/sod/dataset/CrackMap",
                         help='Root directory path for dataset')
     parser.add_argument('--batch_size_train', type=int, default=1,
@@ -84,16 +89,18 @@ def main(args):
     checkpoints_path = "../newcseg/checkpoints"
     cur_time = time.strftime('%Y_%m_%d_%H:%M:%S', time.localtime(time.time()))
     dataset_name = (args.dataset_path).split('/')[-1]
-    process_folder_path = os.path.join(checkpoints_path, cur_time + '_' + dataset_name)
+    ccem_name = args.ccem_mode if args.use_ccem else 'baseline'
+    experiment_name = f'{dataset_name}_seed{args.seed}_ccem_{ccem_name}'
+    process_folder_path = os.path.join(checkpoints_path, cur_time + '_' + experiment_name)
     args.phase = 'train'
     if not os.path.exists(process_folder_path):
         os.makedirs(process_folder_path)
     else:
         print("create process folder error!")
 
-    log_train = get_logger(process_folder_path, 'train')
-    log_test = get_logger(process_folder_path, 'test')
-    log_eval = get_logger(process_folder_path, 'eval')
+    log_train = get_logger(process_folder_path, experiment_name + '_train')
+    log_test = get_logger(process_folder_path, experiment_name + '_test')
+    log_eval = get_logger(process_folder_path, experiment_name + '_eval')
 
     # writer = SummaryWriter('./tensorboard_runs/{}'.format(os.path.join(cur_time + '_' + dataset_name)))
 
@@ -101,8 +108,12 @@ def main(args):
     log_train.info("args: dataset -> " + str(args.dataset_path))
     log_train.info("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     log_train.info("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
+    log_train.info("args: use_ccem -> " + str(args.use_ccem))
+    log_train.info("args: ccem_mode -> " + str(ccem_name))
     print("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     print("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
+    print("args: use_ccem -> " + str(args.use_ccem))
+    print("args: ccem_mode -> " + str(ccem_name))
 
     device = torch.device(args.device)
     seed = args.seed + utils.get_rank()
@@ -153,7 +164,7 @@ def main(args):
         lr_scheduler = PolyLR(optimizer, eta_min=args.min_lr, begin=args.start_epoch, end=args.epochs)
     else:
         raise ValueError(f"Unsupported lr_scheduler: {args.lr_scheduler}")
-    output_dir = args.output_dir + '/' + cur_time + '_Dataset->' + dataset_name
+    output_dir = os.path.join(args.output_dir, cur_time + '_' + experiment_name)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     output_dir = Path(output_dir)
 
@@ -184,7 +195,7 @@ def main(args):
         print("---------------------------------------------------------------------------------------")
 
         print("testing epoch start -> ", epoch)
-        results_path = cur_time + '_Dataset->' + dataset_name
+        results_path = cur_time + '_' + experiment_name
         save_root = f'./results/{results_path}/results_' + str(epoch)
         args.phase = 'test'
         args.batch_size = args.batch_size_test
@@ -260,6 +271,19 @@ def main(args):
     for key, value in max_Metrics.items():
         log_eval.info(str(key) + ' -> ' + str(value))
     log_eval.info('\nmax_mIoU -> ' + str(max_Metrics['mIoU']) + '\nmax Epoch -> ' + str(max_Metrics['epoch']))
+    best_summary = (
+        f"Best metrics | experiment -> {experiment_name} | "
+        f"epoch -> {max_Metrics['epoch']} | "
+        f"mIoU -> {max_Metrics['mIoU']} | "
+        f"F1 -> {max_Metrics['F1']} | "
+        f"ODS -> {max_Metrics['ODS']} | "
+        f"OIS -> {max_Metrics['OIS']} | "
+        f"Precision -> {max_Metrics['Precision']} | "
+        f"Recall -> {max_Metrics['Recall']}"
+    )
+    print(best_summary)
+    log_train.info(best_summary)
+    log_eval.info(best_summary)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
