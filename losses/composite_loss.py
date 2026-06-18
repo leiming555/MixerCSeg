@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 
-from .base_losses import SoftDiceLoss
+from .base_losses import SoftDiceLoss, TverskyLoss, dilate_binary_target
 from .boundary_loss import BoundaryLoss
 
 
@@ -15,41 +15,64 @@ class CompositeCrackLoss(nn.Module):
         lambda_boundary: float = 0.3,
         eps: float = 1e-6,
         loss_warmup_epochs: int = 0,
+        use_tversky: bool = False,
+        lambda_tversky: float = 0.2,
+        tversky_alpha: float = 0.3,
+        tversky_beta: float = 0.7,
+        pos_weight: float = 1.0,
+        use_dilated_bce: bool = False,
+        dilate_kernel: int = 3,
     ):
         super().__init__()
-        self.bce = nn.BCEWithLogitsLoss()
+        pos_weight_tensor = torch.tensor([pos_weight], dtype=torch.float32) if pos_weight > 1.0 else None
+        self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
         self.dice = SoftDiceLoss(eps=1.0)
+        self.tversky = TverskyLoss(alpha=tversky_alpha, beta=tversky_beta, eps=eps)
         self.boundary = BoundaryLoss(eps=eps)
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
         self.use_boundary = use_boundary
         self.lambda_boundary = lambda_boundary
         self.loss_warmup_epochs = loss_warmup_epochs
+        self.use_tversky = use_tversky
+        self.lambda_tversky = lambda_tversky
+        self.use_dilated_bce = use_dilated_bce
+        self.dilate_kernel = dilate_kernel
 
     def forward(self, logits, target, epoch=None):
         target = target.to(dtype=logits.dtype)
         prob = torch.sigmoid(logits)
-        loss_bce = self.bce(logits, target)
+        bce_target = target
+        if self.use_dilated_bce:
+            bce_target = dilate_binary_target(target, self.dilate_kernel)
+        loss_bce = self.bce(logits, bce_target)
         loss_dice = self.dice(prob, target)
         loss_boundary = logits.new_zeros(())
+        loss_tversky = logits.new_zeros(())
 
         boundary_enabled = self.use_boundary and not (
             epoch is not None and epoch < self.loss_warmup_epochs
         )
         if boundary_enabled:
             loss_boundary = self.boundary(prob, target)
+        if self.use_tversky:
+            loss_tversky = self.tversky(prob, target)
 
         loss_total = (
             self.bce_weight * loss_bce
             + self.dice_weight * loss_dice
             + self.lambda_boundary * loss_boundary
+            + self.lambda_tversky * loss_tversky
         )
-        return {
+        out = {
             "loss_total": loss_total,
             "loss_bce": loss_bce.detach(),
             "loss_dice": loss_dice.detach(),
             "loss_boundary": loss_boundary.detach(),
         }
+        if self.use_tversky:
+            out["loss_tversky"] = loss_tversky.detach()
+        return out
 
 
 class CompositeLoss(nn.Module):

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from losses.base_losses import TverskyLoss, dilate_binary_target
 from models.decoder import SRFModule
 from models.encoder import VSSEncoder
 
@@ -36,14 +37,33 @@ class DiceLoss(nn.Module):
 class bce_dice(nn.Module):
     def __init__(self, args):
         super(bce_dice, self).__init__()
-        self.bce_fn = nn.BCEWithLogitsLoss()
+        pos_weight = getattr(args, 'pos_weight', 1.0)
+        pos_weight_tensor = torch.tensor([pos_weight], dtype=torch.float32) if pos_weight > 1.0 else None
+        self.bce_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
         self.dice_fn = DiceLoss()
+        self.tversky_fn = TverskyLoss(
+            alpha=getattr(args, 'tversky_alpha', 0.3),
+            beta=getattr(args, 'tversky_beta', 0.7),
+            eps=getattr(args, 'eps', 1e-6),
+        )
         self.args = args
+        self.use_tversky = getattr(args, 'use_tversky', False)
+        self.lambda_tversky = getattr(args, 'lambda_tversky', 0.2)
+        self.use_dilated_bce = getattr(args, 'use_dilated_bce', False)
+        self.dilate_kernel = getattr(args, 'dilate_kernel', 3)
 
     def forward(self, y_pred, y_true):
-        bce = self.bce_fn(y_pred, y_true)
-        dice = self.dice_fn(y_pred.sigmoid(), y_true)
-        return self.args.BCELoss_ratio * bce + self.args.DiceLoss_ratio * dice
+        y_true = y_true.to(dtype=y_pred.dtype)
+        bce_target = y_true
+        if self.use_dilated_bce:
+            bce_target = dilate_binary_target(y_true, self.dilate_kernel)
+        prob = y_pred.sigmoid()
+        bce = self.bce_fn(y_pred, bce_target)
+        dice = self.dice_fn(prob, y_true)
+        loss = self.args.BCELoss_ratio * bce + self.args.DiceLoss_ratio * dice
+        if self.use_tversky:
+            loss = loss + self.lambda_tversky * self.tversky_fn(prob, y_true)
+        return loss
 
 
 

@@ -183,6 +183,39 @@ def cal_mIoU_metrics(pred_list, gt_list, thresh_step=0.01, pred_imgs_names=None,
     mIoU = np.max(np.array(final_iou))
     return mIoU
 
+def cal_threshold_metrics(pred_list, gt_list, thresholds):
+    results = []
+    for thresh in thresholds:
+        iou_list = []
+        total_tp, total_fp, total_fn = 0, 0, 0
+        for pred, gt in zip(pred_list, gt_list):
+            gt_img = (gt / 255).astype('uint8')
+            pred_img = (pred / 255 > thresh).astype('uint8')
+            TP = np.sum((pred_img == 1) & (gt_img == 1))
+            TN = np.sum((pred_img == 0) & (gt_img == 0))
+            FP = np.sum((pred_img == 1) & (gt_img == 0))
+            FN = np.sum((pred_img == 0) & (gt_img == 1))
+            iou_1_den = TP + FP + FN
+            iou_0_den = TN + FP + FN
+            iou_1 = 0 if iou_1_den == 0 else TP / iou_1_den
+            iou_0 = 0 if iou_0_den == 0 else TN / iou_0_den
+            iou_list.append((iou_1 + iou_0) / 2)
+            total_tp += TP
+            total_fp += FP
+            total_fn += FN
+
+        precision = 1.0 if total_tp == 0 and total_fp == 0 else total_tp / (total_tp + total_fp)
+        recall = 0 if total_tp + total_fn == 0 else total_tp / (total_tp + total_fn)
+        f1 = 0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+        results.append({
+            "threshold": thresh,
+            "mIoU": float(np.mean(np.array(iou_list))),
+            "F1": float(f1),
+            "Precision": float(precision),
+            "Recall": float(recall),
+        })
+    return results
+
 def imread(path, load_size=0, load_mode=cv2.IMREAD_GRAYSCALE, convert_rgb=False, thresh=-1):
     im = cv2.imread(path, load_mode)
     if convert_rgb:
@@ -265,4 +298,3 @@ if __name__ == '__main__':
 
 
     
-

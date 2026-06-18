@@ -22,10 +22,24 @@ from mmengine.optim.scheduler.lr_scheduler import PolyLR
 def get_args_parser():
     parser = argparse.ArgumentParser('MixerCSeg FOR CRACK', add_help=False)
 
-    parser.add_argument('--BCELoss_ratio', default=0.87, type=float,
-                        help='Weight ratio for Binary Cross Entropy Loss (0.0-1.0), should sum to 1 with DiceLoss_ratio')
-    parser.add_argument('--DiceLoss_ratio', default=0.13, type=float,
-                        help='Weight ratio for Dice Loss (0.0-1.0), should sum to 1 with BCELoss_ratio')
+    parser.add_argument('--BCELoss_ratio', default=1.0, type=float,
+                        help='Weight for Binary Cross Entropy Loss')
+    parser.add_argument('--DiceLoss_ratio', default=5.0, type=float,
+                        help='Weight for Dice Loss')
+    parser.add_argument('--use_tversky', action='store_true',
+                        help='Enable BCE + Dice + Tversky training loss')
+    parser.add_argument('--lambda_tversky', default=0.2, type=float,
+                        help='Weight for Tversky Loss')
+    parser.add_argument('--tversky_alpha', default=0.3, type=float,
+                        help='Alpha for Tversky Loss false-positive penalty')
+    parser.add_argument('--tversky_beta', default=0.7, type=float,
+                        help='Beta for Tversky Loss false-negative penalty')
+    parser.add_argument('--pos_weight', default=1.0, type=float,
+                        help='Positive-class weight for BCEWithLogitsLoss; enabled when > 1')
+    parser.add_argument('--use_dilated_bce', action='store_true',
+                        help='Use dilated masks for BCE target only')
+    parser.add_argument('--dilate_kernel', default=3, type=int,
+                        help='Odd kernel size for dilated BCE mask')
     parser.add_argument('--use_boundary_loss', action='store_true',
                         help='Enable BCE + Dice + Boundary training loss')
     parser.add_argument('--lambda_boundary', default=0.3, type=float,
@@ -115,12 +129,26 @@ def main(args):
     log_train.info("args: dataset -> " + str(args.dataset_path))
     log_train.info("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     log_train.info("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
+    log_train.info("args: use_tversky -> " + str(args.use_tversky))
+    log_train.info("args: lambda_tversky -> " + str(args.lambda_tversky))
+    log_train.info("args: tversky_alpha -> " + str(args.tversky_alpha))
+    log_train.info("args: tversky_beta -> " + str(args.tversky_beta))
+    log_train.info("args: pos_weight -> " + str(args.pos_weight))
+    log_train.info("args: use_dilated_bce -> " + str(args.use_dilated_bce))
+    log_train.info("args: dilate_kernel -> " + str(args.dilate_kernel))
     log_train.info("args: use_ccem -> " + str(args.use_ccem))
     log_train.info("args: ccem_mode -> " + str(ccem_name))
     log_train.info("args: use_edrm -> " + str(args.use_edrm))
     log_train.info("args: edrm_stages -> " + str(args.edrm_stages))
     print("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     print("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
+    print("args: use_tversky -> " + str(args.use_tversky))
+    print("args: lambda_tversky -> " + str(args.lambda_tversky))
+    print("args: tversky_alpha -> " + str(args.tversky_alpha))
+    print("args: tversky_beta -> " + str(args.tversky_beta))
+    print("args: pos_weight -> " + str(args.pos_weight))
+    print("args: use_dilated_bce -> " + str(args.use_dilated_bce))
+    print("args: dilate_kernel -> " + str(args.dilate_kernel))
     print("args: use_ccem -> " + str(args.use_ccem))
     print("args: ccem_mode -> " + str(ccem_name))
     print("args: use_edrm -> " + str(args.use_edrm))
@@ -143,6 +171,13 @@ def main(args):
             lambda_boundary=args.lambda_boundary,
             loss_warmup_epochs=args.loss_warmup_epochs,
             eps=args.eps,
+            use_tversky=args.use_tversky,
+            lambda_tversky=args.lambda_tversky,
+            tversky_alpha=args.tversky_alpha,
+            tversky_beta=args.tversky_beta,
+            pos_weight=args.pos_weight,
+            use_dilated_bce=args.use_dilated_bce,
+            dilate_kernel=args.dilate_kernel,
         ).to(device)
     model.to(device)
     args.batch_size = args.batch_size_train
