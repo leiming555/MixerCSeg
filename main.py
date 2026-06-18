@@ -43,6 +43,11 @@ def get_args_parser():
     parser.add_argument('--ccem_mode', default='full', type=str,
                         choices=['full', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
                         help='CCEM ablation mode')
+    parser.add_argument('--use_edrm', action='store_true',
+                        help='Enable EDRM after DEGConv and before CCEM in shallow encoder stages')
+    parser.add_argument('--edrm_stages', default='f1', type=str,
+                        choices=['f1', 'f1_f2'],
+                        help='EDRM placement: f1 or f1_f2')
     parser.add_argument('--dataset_path', default="/home/linux/code/sod/dataset/CrackMap",
                         help='Root directory path for dataset')
     parser.add_argument('--batch_size_train', type=int, default=1,
@@ -91,6 +96,8 @@ def main(args):
     dataset_name = (args.dataset_path).split('/')[-1]
     ccem_name = args.ccem_mode if args.use_ccem else 'baseline'
     experiment_name = f'{dataset_name}_seed{args.seed}_ccem_{ccem_name}'
+    if args.use_edrm:
+        experiment_name = f'{experiment_name}_edrm_{args.edrm_stages}'
     process_folder_path = os.path.join(checkpoints_path, cur_time + '_' + experiment_name)
     args.phase = 'train'
     if not os.path.exists(process_folder_path):
@@ -110,10 +117,14 @@ def main(args):
     log_train.info("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
     log_train.info("args: use_ccem -> " + str(args.use_ccem))
     log_train.info("args: ccem_mode -> " + str(ccem_name))
+    log_train.info("args: use_edrm -> " + str(args.use_edrm))
+    log_train.info("args: edrm_stages -> " + str(args.edrm_stages))
     print("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     print("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
     print("args: use_ccem -> " + str(args.use_ccem))
     print("args: ccem_mode -> " + str(ccem_name))
+    print("args: use_edrm -> " + str(args.use_edrm))
+    print("args: edrm_stages -> " + str(args.edrm_stages))
 
     device = torch.device(args.device)
     seed = args.seed + utils.get_rank()

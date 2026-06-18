@@ -11,6 +11,7 @@ from torch.nn.modules.batchnorm import _BatchNorm
 from models.utils import LayerNorm1D, LayerNorm2D, FFN, Stem, PatchMerging
 from models.layers import HoGEdgeGateConv
 from models.ccem import CrackContinuityEnhancementModule
+from models.edrm import EdgeDetailRecoveryModule
 
 from VMamba.models.vmamba import TransMixer
 
@@ -26,6 +27,7 @@ class VSS(nn.Module):
         nbins=36,
         use_ccem=False,
         ccem_mode="full",
+        use_edrm=False,
     ):
         super().__init__()
         self.depth = depth
@@ -38,6 +40,8 @@ class VSS(nn.Module):
                             nbins=nbins
                 )
             ]
+            if use_edrm:
+                layers.append(EdgeDetailRecoveryModule(channels=in_dim))
             if use_ccem:
                 layers.append(CrackContinuityEnhancementModule(channels=in_dim, mode=ccem_mode))
             block = nn.Sequential(*layers)
@@ -59,8 +63,12 @@ class VSSEncoder(nn.Module):
                  nbins=36,
                  use_ccem=False,
                  ccem_mode="full",
+                 use_edrm=False,
+                 edrm_stages="f1",
                  ):
         super().__init__()
+        if edrm_stages not in {"f1", "f1_f2"}:
+            raise ValueError(f"Unsupported edrm_stages: {edrm_stages}")
         self.num_layers = len(depths)
         self.distillation =distillation
         if is_patch_embed:
@@ -71,6 +79,8 @@ class VSSEncoder(nn.Module):
         self.vss_layers = nn.ModuleList()
         self.downsamples = nn.ModuleList()
         for i_layer in range(self.num_layers):
+            edrm_stage_limit = 2 if edrm_stages == "f1_f2" else 1
+            stage_use_edrm = use_edrm and i_layer < edrm_stage_limit
 
             vss = VSS(in_dim=int(embed_dim[i_layer]),
                       depth=depths[i_layer],
@@ -78,7 +88,8 @@ class VSSEncoder(nn.Module):
                       state_dim = state_dim[i_layer],
                       nbins=nbins,
                       use_ccem=use_ccem,
-                      ccem_mode=ccem_mode)
+                      ccem_mode=ccem_mode,
+                      use_edrm=stage_use_edrm)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:
