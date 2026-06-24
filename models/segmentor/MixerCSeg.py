@@ -85,6 +85,8 @@ def build_MixerCSeg(args):
         nbins=getattr(args, 'nbins', 36),
         use_ccem=getattr(args, 'use_ccem', False),
         ccem_mode=getattr(args, 'ccem_mode', 'full'),
+        ccem_gate_mode=getattr(args, 'ccem_gate_mode', 'original'),
+        ccem_branch_weight=getattr(args, 'ccem_branch_weight', False),
         use_edrm=getattr(args, 'use_edrm', False),
         edrm_stages=getattr(args, 'edrm_stages', 'f1'),
         )

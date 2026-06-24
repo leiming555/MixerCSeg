@@ -66,19 +66,58 @@ pip install numpy==1.23
 ## Getting Started
 ### Train your model
 
-You can modify the parameters in the main.py file and run it with the following command:
+Train the original MixerCSeg baseline:
 ```
-python main.py --dataset_path [your_dataset_path]
+python main.py --dataset_path dataset/CrackMap --nbins 180 --output_dir work_dirs
+```
+
+Train the final CCEM + Tversky setting used by the current paper draft:
+```
+python main.py \
+  --dataset_path dataset/CrackMap \
+  --nbins 180 \
+  --output_dir work_dirs \
+  --use_ccem \
+  --ccem_mode full \
+  --use_tversky \
+  --lambda_tversky 0.2 \
+  --tversky_alpha 0.3 \
+  --tversky_beta 0.7
 ```
 
 ### Test
-You can perform inference on checkpoints using the following command. **Note:** Please set the dataset file at line 17 of test.py, and specify the checkpoint location at line 24:
+
+During training, predictions and labels are saved under:
 ```
-python test.py
+results/<timestamp>_<experiment_name>/results_<epoch>/
 ```
-Calculate performance metrics using the following command. Please ensure to configure your result path:
+
+The main paper metrics should be recomputed from saved `*_pre.png` and `*_lab.png` files with ODS/OIS threshold sweeping:
 ```
-python eval/evaluate.py --result_path [your_results_path]
+python tools/eval_standard.py \
+  --result_dir results/<timestamp>_<experiment_name>/results_<epoch> \
+  --method CCEM_Tversky
+```
+
+The legacy `eval/evaluate.py` script is retained for compatibility with training logs. Use `tools/eval_standard.py` for the reported paper tables.
+
+### Reproduce CCEM Ablations
+
+Run the CrackMap CCEM ablation group:
+```
+bash run_ccem_ablation.sh
+```
+
+Run CCEM full on DeepCrack and CamCrack789:
+```
+bash run_ccem_full_deepcrack_camcrack.sh
+```
+
+### Tests
+
+Run the local project tests from the repository root:
+```
+PYTHONPATH=. pytest tests
 ```
 
 ### Datasets and Checkpoints
@@ -106,7 +145,6 @@ If you are using our MixerCSeg for your research, please cite the following pape
 ## Concat
 
 If you have any other questions, feel free to contact me at **zzl000503@163.com**.
-
 
 
 

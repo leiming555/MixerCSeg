@@ -57,6 +57,11 @@ def get_args_parser():
     parser.add_argument('--ccem_mode', default='full', type=str,
                         choices=['full', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
                         help='CCEM ablation mode')
+    parser.add_argument('--ccem_gate_mode', default='original', type=str,
+                        choices=['original', 'leaky'],
+                        help='CCEM gate mode')
+    parser.add_argument('--ccem_branch_weight', action='store_true',
+                        help='Enable learnable scalar weights for CCEM branches')
     parser.add_argument('--use_edrm', action='store_true',
                         help='Enable EDRM after DEGConv and before CCEM in shallow encoder stages')
     parser.add_argument('--edrm_stages', default='f1', type=str,
@@ -110,6 +115,10 @@ def main(args):
     dataset_name = (args.dataset_path).split('/')[-1]
     ccem_name = args.ccem_mode if args.use_ccem else 'baseline'
     experiment_name = f'{dataset_name}_seed{args.seed}_ccem_{ccem_name}'
+    if args.use_ccem and args.ccem_gate_mode != 'original':
+        experiment_name = f'{experiment_name}_gate_{args.ccem_gate_mode}'
+    if args.use_ccem and args.ccem_branch_weight:
+        experiment_name = f'{experiment_name}_branch_weight'
     if args.use_edrm:
         experiment_name = f'{experiment_name}_edrm_{args.edrm_stages}'
     process_folder_path = os.path.join(checkpoints_path, cur_time + '_' + experiment_name)
@@ -138,6 +147,8 @@ def main(args):
     log_train.info("args: dilate_kernel -> " + str(args.dilate_kernel))
     log_train.info("args: use_ccem -> " + str(args.use_ccem))
     log_train.info("args: ccem_mode -> " + str(ccem_name))
+    log_train.info("args: ccem_gate_mode -> " + str(args.ccem_gate_mode))
+    log_train.info("args: ccem_branch_weight -> " + str(args.ccem_branch_weight))
     log_train.info("args: use_edrm -> " + str(args.use_edrm))
     log_train.info("args: edrm_stages -> " + str(args.edrm_stages))
     print("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
@@ -151,6 +162,8 @@ def main(args):
     print("args: dilate_kernel -> " + str(args.dilate_kernel))
     print("args: use_ccem -> " + str(args.use_ccem))
     print("args: ccem_mode -> " + str(ccem_name))
+    print("args: ccem_gate_mode -> " + str(args.ccem_gate_mode))
+    print("args: ccem_branch_weight -> " + str(args.ccem_branch_weight))
     print("args: use_edrm -> " + str(args.use_edrm))
     print("args: edrm_stages -> " + str(args.edrm_stages))
 

@@ -35,7 +35,11 @@ def test_encoder_optionally_adds_ccem_after_degconv():
 
     assert any(isinstance(arg, ast.Starred) for arg in sequential.args)
     assert "if use_ccem:" in source
-    assert "CrackContinuityEnhancementModule(channels=in_dim, mode=ccem_mode)" in source
+    assert "CrackContinuityEnhancementModule(" in source
+    assert "channels=in_dim" in source
+    assert "mode=ccem_mode" in source
+    assert "gate_mode=ccem_gate_mode" in source
+    assert "branch_weight=ccem_branch_weight" in source
 
 
 def test_encoder_passes_ccem_flags_from_args():

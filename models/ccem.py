@@ -84,13 +84,20 @@ class CrackContinuityEnhancementModule(nn.Module):
         dilation: int = 2,
         min_hidden_channels: int = 16,
         mode: str = "full",
+        gate_mode: str = "original",
+        branch_weight: bool = False,
     ):
         super().__init__()
 
         valid_modes = {"full", "no_local", "no_strip", "no_dilation", "no_gate"}
         if mode not in valid_modes:
             raise ValueError(f"Unsupported CCEM mode: {mode}. Expected one of {sorted(valid_modes)}.")
+        valid_gate_modes = {"original", "leaky"}
+        if gate_mode not in valid_gate_modes:
+            raise ValueError(f"Unsupported CCEM gate_mode: {gate_mode}. Expected one of {sorted(valid_gate_modes)}.")
         self.mode = mode
+        self.gate_mode = gate_mode
+        self.branch_weight = branch_weight
         self.use_local = mode != "no_local"
         self.use_strip = mode != "no_strip"
         self.use_dilation = mode != "no_dilation"
@@ -152,6 +159,14 @@ class CrackContinuityEnhancementModule(nn.Module):
                 act=True,
             )
 
+        if self.branch_weight:
+            if self.use_local:
+                self.local_weight = nn.Parameter(torch.ones(1))
+            if self.use_strip:
+                self.strip_weight = nn.Parameter(torch.ones(1))
+            if self.use_dilation:
+                self.dilation_weight = nn.Parameter(torch.ones(1))
+
         # Fuse all branches
         branch_count = int(self.use_local) + int(self.use_strip) * 2 + int(self.use_dilation)
         self.fuse = ConvGNAct(
@@ -164,10 +179,7 @@ class CrackContinuityEnhancementModule(nn.Module):
 
         if self.use_gate:
             # Gate: decide where crack-continuity features should be enhanced
-            self.gate = nn.Sequential(
-                nn.Conv2d(channels, channels, kernel_size=1, bias=True),
-                nn.Sigmoid(),
-            )
+            self.gate = nn.Conv2d(channels, channels, kernel_size=1, bias=True)
 
         # Learnable residual scale.
         # Initialized as 0 to avoid destroying pretrained/original features at the beginning.
@@ -181,21 +193,35 @@ class CrackContinuityEnhancementModule(nn.Module):
         branch_feats = []
 
         if self.use_local:
-            branch_feats.append(self.local_branch(x_reduced))
+            local_feat = self.local_branch(x_reduced)
+            if self.branch_weight:
+                local_feat = self.local_weight * local_feat
+            branch_feats.append(local_feat)
 
         if self.use_strip:
-            branch_feats.append(self.strip_h(x_reduced))
-            branch_feats.append(self.strip_v(x_reduced))
+            strip_h_feat = self.strip_h(x_reduced)
+            strip_v_feat = self.strip_v(x_reduced)
+            if self.branch_weight:
+                strip_h_feat = self.strip_weight * strip_h_feat
+                strip_v_feat = self.strip_weight * strip_v_feat
+            branch_feats.append(strip_h_feat)
+            branch_feats.append(strip_v_feat)
 
         if self.use_dilation:
-            branch_feats.append(self.dilation_branch(x_reduced))
+            dilation_feat = self.dilation_branch(x_reduced)
+            if self.branch_weight:
+                dilation_feat = self.dilation_weight * dilation_feat
+            branch_feats.append(dilation_feat)
 
         fused = torch.cat(branch_feats, dim=1)
 
         fused = self.fuse(fused)
 
         if self.use_gate:
-            fused = self.gate(fused) * fused
+            gate = torch.sigmoid(self.gate(fused))
+            if self.gate_mode == "leaky":
+                gate = 0.5 + 0.5 * gate
+            fused = gate * fused
 
         out = identity + self.gamma * fused
 

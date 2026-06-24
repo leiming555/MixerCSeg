@@ -27,6 +27,8 @@ class VSS(nn.Module):
         nbins=36,
         use_ccem=False,
         ccem_mode="full",
+        ccem_gate_mode="original",
+        ccem_branch_weight=False,
         use_edrm=False,
     ):
         super().__init__()
@@ -43,7 +45,12 @@ class VSS(nn.Module):
             if use_edrm:
                 layers.append(EdgeDetailRecoveryModule(channels=in_dim))
             if use_ccem:
-                layers.append(CrackContinuityEnhancementModule(channels=in_dim, mode=ccem_mode))
+                layers.append(CrackContinuityEnhancementModule(
+                    channels=in_dim,
+                    mode=ccem_mode,
+                    gate_mode=ccem_gate_mode,
+                    branch_weight=ccem_branch_weight,
+                ))
             block = nn.Sequential(*layers)
             self.blocks.append(block)
 
@@ -63,6 +70,8 @@ class VSSEncoder(nn.Module):
                  nbins=36,
                  use_ccem=False,
                  ccem_mode="full",
+                 ccem_gate_mode="original",
+                 ccem_branch_weight=False,
                  use_edrm=False,
                  edrm_stages="f1",
                  ):
@@ -89,6 +98,8 @@ class VSSEncoder(nn.Module):
                       nbins=nbins,
                       use_ccem=use_ccem,
                       ccem_mode=ccem_mode,
+                      ccem_gate_mode=ccem_gate_mode,
+                      ccem_branch_weight=ccem_branch_weight,
                       use_edrm=stage_use_edrm)
             self.vss_layers.append(vss)
 
