@@ -92,14 +92,23 @@ During training, predictions and labels are saved under:
 results/<timestamp>_<experiment_name>/results_<epoch>/
 ```
 
-The main paper metrics should be recomputed from saved `*_pre.png` and `*_lab.png` files with ODS/OIS threshold sweeping:
+For formal evaluation, save sigmoid probability maps from a checkpoint:
+```
+python tools/infer_probability.py \
+  --dataset_path dataset/CrackMap \
+  --checkpoint checkpoints/weights/<experiment>/checkpoint_best.pth \
+  --save_dir results/probability_maps/CrackMap_final \
+  --infer_phase test
+```
+
+Then recompute the main paper metrics from saved `*_pre.png` and `*_lab.png` files with ODS/OIS threshold sweeping:
 ```
 python tools/eval_standard.py \
-  --result_dir results/<timestamp>_<experiment_name>/results_<epoch> \
+  --result_dir results/probability_maps/CrackMap_final \
   --method CCEM_Tversky
 ```
 
-The legacy `eval/evaluate.py` script is retained for compatibility with training logs. Use `tools/eval_standard.py` for the reported paper tables.
+`tools/infer_probability.py` reuses architecture and preprocessing arguments stored in the checkpoint by default. Use `--no-use_checkpoint_args` only when you want to supply all model flags manually. The legacy `eval/evaluate.py` script is retained for compatibility with training logs. Use `tools/eval_standard.py` for the reported paper tables.
 
 ### Reproduce CCEM Ablations
 
@@ -145,7 +154,6 @@ If you are using our MixerCSeg for your research, please cite the following pape
 ## Concat
 
 If you have any other questions, feel free to contact me at **zzl000503@163.com**.
-
 
 
 
