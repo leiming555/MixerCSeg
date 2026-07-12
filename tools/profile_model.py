@@ -12,6 +12,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from models import build_MixerCSeg as build_model  # noqa: E402
+from models.experimental_modules import EXPERIMENTAL_MODULE_MODES  # noqa: E402
 
 
 def get_args():
@@ -23,8 +24,13 @@ def get_args():
     parser.add_argument('--use_ccem', action='store_true',
                         help='Enable CCEM after DEGConv in every encoder stage')
     parser.add_argument('--ccem_mode', default='full', type=str,
-                        choices=['full', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
+                        choices=['full', 'enhanced', 'transformer', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
                         help='CCEM ablation mode')
+    parser.add_argument('--use_exp_module', action='store_true',
+                        help='Enable experimental enhancement module after DEGConv')
+    parser.add_argument('--exp_module_mode', default='win_attn_strip_gate', type=str,
+                        choices=EXPERIMENTAL_MODULE_MODES,
+                        help='Experimental enhancement module mode')
     parser.add_argument('--input_size', default=512, type=int,
                         help='Input image size, using square input')
     parser.add_argument('--batch_size', default=1, type=int,
@@ -44,6 +50,8 @@ def build_profile_args(args, device):
         nbins=args.nbins,
         use_ccem=args.use_ccem,
         ccem_mode=args.ccem_mode,
+        use_exp_module=args.use_exp_module,
+        exp_module_mode=args.exp_module_mode,
         dataset_path=args.dataset_path,
         device=device,
         load_width=args.input_size,
@@ -108,12 +116,16 @@ def benchmark(model, dummy_input, warmup, repeat, device):
 def print_results(args, params_m, flops_g, size_mb, fps, latency_ms, peak_memory_mb):
     dataset_name = os.path.basename(args.dataset_path.rstrip('/'))
     mode = args.ccem_mode if args.use_ccem else 'baseline'
+    if args.use_exp_module:
+        mode = f'{mode}_exp_{args.exp_module_mode}'
 
     print('\n================ MixerCSeg Profile ================')
     print(f'Dataset      : {dataset_name}')
     print(f'Model        : {mode}')
     print(f'CCEM enabled : {args.use_ccem}')
-    print(f'CCEM mode    : {mode}')
+    print(f'CCEM mode    : {args.ccem_mode if args.use_ccem else "baseline"}')
+    print(f'Exp enabled  : {args.use_exp_module}')
+    print(f'Exp mode     : {args.exp_module_mode}')
     print(f'Input        : {args.batch_size} x 3 x {args.input_size} x {args.input_size}')
     print(f'NBINS        : {args.nbins}')
     print('---------------------------------------------------')

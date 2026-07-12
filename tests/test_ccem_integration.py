@@ -10,10 +10,33 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_ccem_modes_preserve_shape():
     x = torch.randn(1, 16, 16, 16)
 
-    for mode in ["full", "no_local", "no_strip", "no_dilation", "no_gate"]:
+    for mode in ["full", "enhanced", "transformer", "no_local", "no_strip", "no_dilation", "no_gate"]:
         module = CrackContinuityEnhancementModule(channels=16, mode=mode)
         y = module(x)
         assert y.shape == x.shape
+
+
+def test_enhanced_ccem_backward():
+    x = torch.randn(1, 16, 16, 16, requires_grad=True)
+    module = CrackContinuityEnhancementModule(channels=16, mode="enhanced")
+    y = module(x)
+    loss = y.mean()
+    loss.backward()
+
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+
+def test_transformer_ccem_handles_non_window_size():
+    x = torch.randn(1, 16, 15, 17, requires_grad=True)
+    module = CrackContinuityEnhancementModule(channels=16, mode="transformer")
+    y = module(x)
+    loss = y.mean()
+    loss.backward()
+
+    assert y.shape == x.shape
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
 
 
 def test_encoder_optionally_adds_ccem_after_degconv():

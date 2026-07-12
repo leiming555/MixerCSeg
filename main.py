@@ -15,6 +15,7 @@ from eval.evaluate import eval
 from util.logger import get_logger
 from tqdm import tqdm
 from mmengine.optim.scheduler.lr_scheduler import PolyLR
+from models.experimental_modules import EXPERIMENTAL_MODULE_MODES
 
 # from torch.utils.tensorboard import SummaryWriter
 
@@ -34,6 +35,12 @@ def get_args_parser():
                         help='Alpha for Tversky Loss false-positive penalty')
     parser.add_argument('--tversky_beta', default=0.7, type=float,
                         help='Beta for Tversky Loss false-negative penalty')
+    parser.add_argument('--tversky_gamma', default=1.0, type=float,
+                        help='Focal exponent for Tversky Loss; 1.0 keeps the original Tversky form')
+    parser.add_argument('--tversky_multiscale', action='store_true',
+                        help='Apply Tversky Loss at 1x, 1/2x, and 1/4x scales')
+    parser.add_argument('--tversky_tolerant_kernel', default=1, type=int,
+                        help='Odd dilation kernel for Tversky false-positive tolerance; 1 disables tolerance')
     parser.add_argument('--pos_weight', default=1.0, type=float,
                         help='Positive-class weight for BCEWithLogitsLoss; enabled when > 1')
     parser.add_argument('--use_dilated_bce', action='store_true',
@@ -55,7 +62,7 @@ def get_args_parser():
     parser.add_argument('--use_ccem', action='store_true',
                         help='Enable CCEM after DEGConv in every encoder stage')
     parser.add_argument('--ccem_mode', default='full', type=str,
-                        choices=['full', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
+                        choices=['full', 'enhanced', 'transformer', 'no_local', 'no_strip', 'no_dilation', 'no_gate'],
                         help='CCEM ablation mode')
     parser.add_argument('--ccem_gate_mode', default='original', type=str,
                         choices=['original', 'leaky'],
@@ -67,6 +74,11 @@ def get_args_parser():
     parser.add_argument('--edrm_stages', default='f1', type=str,
                         choices=['f1', 'f1_f2'],
                         help='EDRM placement: f1 or f1_f2')
+    parser.add_argument('--use_exp_module', action='store_true',
+                        help='Enable experimental enhancement module after DEGConv')
+    parser.add_argument('--exp_module_mode', default='win_attn_strip_gate', type=str,
+                        choices=EXPERIMENTAL_MODULE_MODES,
+                        help='Experimental enhancement module mode')
     parser.add_argument('--dataset_path', default="/home/linux/code/sod/dataset/CrackMap",
                         help='Root directory path for dataset')
     parser.add_argument('--batch_size_train', type=int, default=1,
@@ -121,6 +133,8 @@ def main(args):
         experiment_name = f'{experiment_name}_branch_weight'
     if args.use_edrm:
         experiment_name = f'{experiment_name}_edrm_{args.edrm_stages}'
+    if args.use_exp_module:
+        experiment_name = f'{experiment_name}_exp_{args.exp_module_mode}'
     process_folder_path = os.path.join(checkpoints_path, cur_time + '_' + experiment_name)
     args.phase = 'train'
     if not os.path.exists(process_folder_path):
@@ -142,6 +156,9 @@ def main(args):
     log_train.info("args: lambda_tversky -> " + str(args.lambda_tversky))
     log_train.info("args: tversky_alpha -> " + str(args.tversky_alpha))
     log_train.info("args: tversky_beta -> " + str(args.tversky_beta))
+    log_train.info("args: tversky_gamma -> " + str(args.tversky_gamma))
+    log_train.info("args: tversky_multiscale -> " + str(args.tversky_multiscale))
+    log_train.info("args: tversky_tolerant_kernel -> " + str(args.tversky_tolerant_kernel))
     log_train.info("args: pos_weight -> " + str(args.pos_weight))
     log_train.info("args: use_dilated_bce -> " + str(args.use_dilated_bce))
     log_train.info("args: dilate_kernel -> " + str(args.dilate_kernel))
@@ -151,12 +168,17 @@ def main(args):
     log_train.info("args: ccem_branch_weight -> " + str(args.ccem_branch_weight))
     log_train.info("args: use_edrm -> " + str(args.use_edrm))
     log_train.info("args: edrm_stages -> " + str(args.edrm_stages))
+    log_train.info("args: use_exp_module -> " + str(args.use_exp_module))
+    log_train.info("args: exp_module_mode -> " + str(args.exp_module_mode))
     print("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     print("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
     print("args: use_tversky -> " + str(args.use_tversky))
     print("args: lambda_tversky -> " + str(args.lambda_tversky))
     print("args: tversky_alpha -> " + str(args.tversky_alpha))
     print("args: tversky_beta -> " + str(args.tversky_beta))
+    print("args: tversky_gamma -> " + str(args.tversky_gamma))
+    print("args: tversky_multiscale -> " + str(args.tversky_multiscale))
+    print("args: tversky_tolerant_kernel -> " + str(args.tversky_tolerant_kernel))
     print("args: pos_weight -> " + str(args.pos_weight))
     print("args: use_dilated_bce -> " + str(args.use_dilated_bce))
     print("args: dilate_kernel -> " + str(args.dilate_kernel))
@@ -166,6 +188,8 @@ def main(args):
     print("args: ccem_branch_weight -> " + str(args.ccem_branch_weight))
     print("args: use_edrm -> " + str(args.use_edrm))
     print("args: edrm_stages -> " + str(args.edrm_stages))
+    print("args: use_exp_module -> " + str(args.use_exp_module))
+    print("args: exp_module_mode -> " + str(args.exp_module_mode))
 
     device = torch.device(args.device)
     seed = args.seed + utils.get_rank()
@@ -188,6 +212,9 @@ def main(args):
             lambda_tversky=args.lambda_tversky,
             tversky_alpha=args.tversky_alpha,
             tversky_beta=args.tversky_beta,
+            tversky_gamma=args.tversky_gamma,
+            tversky_multiscale=args.tversky_multiscale,
+            tversky_tolerant_kernel=args.tversky_tolerant_kernel,
             pos_weight=args.pos_weight,
             use_dilated_bce=args.use_dilated_bce,
             dilate_kernel=args.dilate_kernel,

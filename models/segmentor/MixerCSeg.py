@@ -45,6 +45,9 @@ class bce_dice(nn.Module):
             alpha=getattr(args, 'tversky_alpha', 0.3),
             beta=getattr(args, 'tversky_beta', 0.7),
             eps=getattr(args, 'eps', 1e-6),
+            gamma=getattr(args, 'tversky_gamma', 1.0),
+            multiscale=getattr(args, 'tversky_multiscale', False),
+            tolerant_kernel=getattr(args, 'tversky_tolerant_kernel', 1),
         )
         self.args = args
         self.use_tversky = getattr(args, 'use_tversky', False)
@@ -89,6 +92,8 @@ def build_MixerCSeg(args):
         ccem_branch_weight=getattr(args, 'ccem_branch_weight', False),
         use_edrm=getattr(args, 'use_edrm', False),
         edrm_stages=getattr(args, 'edrm_stages', 'f1'),
+        use_exp_module=getattr(args, 'use_exp_module', False),
+        exp_module_mode=getattr(args, 'exp_module_mode', 'win_attn_strip_gate'),
         )
     model = MixerCSeg(backbone, embed_dim, args).to(device)
 

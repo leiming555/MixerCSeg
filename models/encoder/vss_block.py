@@ -12,6 +12,7 @@ from models.utils import LayerNorm1D, LayerNorm2D, FFN, Stem, PatchMerging
 from models.layers import HoGEdgeGateConv
 from models.ccem import CrackContinuityEnhancementModule
 from models.edrm import EdgeDetailRecoveryModule
+from models.experimental_modules import ExperimentalEnhancementModule
 
 from VMamba.models.vmamba import TransMixer
 
@@ -30,6 +31,8 @@ class VSS(nn.Module):
         ccem_gate_mode="original",
         ccem_branch_weight=False,
         use_edrm=False,
+        use_exp_module=False,
+        exp_module_mode="win_attn_strip_gate",
     ):
         super().__init__()
         self.depth = depth
@@ -44,6 +47,11 @@ class VSS(nn.Module):
             ]
             if use_edrm:
                 layers.append(EdgeDetailRecoveryModule(channels=in_dim))
+            if use_exp_module:
+                layers.append(ExperimentalEnhancementModule(
+                    channels=in_dim,
+                    mode=exp_module_mode,
+                ))
             if use_ccem:
                 layers.append(CrackContinuityEnhancementModule(
                     channels=in_dim,
@@ -74,6 +82,8 @@ class VSSEncoder(nn.Module):
                  ccem_branch_weight=False,
                  use_edrm=False,
                  edrm_stages="f1",
+                 use_exp_module=False,
+                 exp_module_mode="win_attn_strip_gate",
                  ):
         super().__init__()
         if edrm_stages not in {"f1", "f1_f2"}:
@@ -100,7 +110,9 @@ class VSSEncoder(nn.Module):
                       ccem_mode=ccem_mode,
                       ccem_gate_mode=ccem_gate_mode,
                       ccem_branch_weight=ccem_branch_weight,
-                      use_edrm=stage_use_edrm)
+                      use_edrm=stage_use_edrm,
+                      use_exp_module=use_exp_module,
+                      exp_module_mode=exp_module_mode)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:

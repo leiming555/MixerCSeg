@@ -19,6 +19,9 @@ class CompositeCrackLoss(nn.Module):
         lambda_tversky: float = 0.2,
         tversky_alpha: float = 0.3,
         tversky_beta: float = 0.7,
+        tversky_gamma: float = 1.0,
+        tversky_multiscale: bool = False,
+        tversky_tolerant_kernel: int = 1,
         pos_weight: float = 1.0,
         use_dilated_bce: bool = False,
         dilate_kernel: int = 3,
@@ -27,7 +30,14 @@ class CompositeCrackLoss(nn.Module):
         pos_weight_tensor = torch.tensor([pos_weight], dtype=torch.float32) if pos_weight > 1.0 else None
         self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
         self.dice = SoftDiceLoss(eps=1.0)
-        self.tversky = TverskyLoss(alpha=tversky_alpha, beta=tversky_beta, eps=eps)
+        self.tversky = TverskyLoss(
+            alpha=tversky_alpha,
+            beta=tversky_beta,
+            eps=eps,
+            gamma=tversky_gamma,
+            multiscale=tversky_multiscale,
+            tolerant_kernel=tversky_tolerant_kernel,
+        )
         self.boundary = BoundaryLoss(eps=eps)
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight

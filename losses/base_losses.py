@@ -16,19 +16,62 @@ class SoftDiceLoss(nn.Module):
         return 1.0 - dice.mean()
 
 class TverskyLoss(nn.Module):
-    def __init__(self, alpha: float = 0.3, beta: float = 0.7, eps: float = 1e-6):
+    def __init__(
+        self,
+        alpha: float = 0.3,
+        beta: float = 0.7,
+        eps: float = 1e-6,
+        gamma: float = 1.0,
+        multiscale: bool = False,
+        tolerant_kernel: int = 1,
+    ):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
         self.eps = eps
+        self.gamma = gamma
+        self.multiscale = multiscale
+        self.tolerant_kernel = tolerant_kernel
 
-    def forward(self, prob: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def _single_scale_loss(self, prob: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         dims = tuple(range(2, prob.ndim))
+        target = target.to(dtype=prob.dtype)
+        fp_target = target
+        if self.tolerant_kernel > 1:
+            with torch.no_grad():
+                fp_target = dilate_binary_target(target, self.tolerant_kernel)
         tp = (prob * target).sum(dims)
-        fp = (prob * (1.0 - target)).sum(dims)
+        fp = (prob * (1.0 - fp_target)).sum(dims)
         fn = ((1.0 - prob) * target).sum(dims)
         score = (tp + self.eps) / (tp + self.alpha * fp + self.beta * fn + self.eps)
-        return 1.0 - score.mean()
+        loss = 1.0 - score
+        if self.gamma != 1.0:
+            loss = loss.clamp_min(0.0).pow(self.gamma)
+        return loss.mean()
+
+    def _downsample(self, prob: torch.Tensor, target: torch.Tensor, scale: int):
+        if scale <= 1:
+            return prob, target
+        prob_s = F.avg_pool2d(
+            prob,
+            kernel_size=scale,
+            stride=scale,
+            ceil_mode=True,
+            count_include_pad=False,
+        )
+        target_s = F.max_pool2d(target, kernel_size=scale, stride=scale, ceil_mode=True)
+        return prob_s, target_s
+
+    def forward(self, prob: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        target = target.to(dtype=prob.dtype)
+        if not self.multiscale or prob.ndim != 4:
+            return self._single_scale_loss(prob, target)
+
+        losses = []
+        for scale in (1, 2, 4):
+            prob_s, target_s = self._downsample(prob, target, scale)
+            losses.append(self._single_scale_loss(prob_s, target_s))
+        return torch.stack(losses).mean()
 
 def dilate_binary_target(target: torch.Tensor, kernel_size: int) -> torch.Tensor:
     if kernel_size <= 1:
