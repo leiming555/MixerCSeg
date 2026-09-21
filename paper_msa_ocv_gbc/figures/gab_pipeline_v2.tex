@@ -1,0 +1,77 @@
+% Exact data flow of TripleStackV3Block(mode="msa_ocv_gbc").
+\begingroup
+\begin{tikzpicture}[
+  font=\sffamily\scriptsize,
+  >=Latex,
+  flow/.style={->, line width=0.85pt, draw=black!72},
+  candidate/.style={->, line width=0.85pt, draw=teal!70!black},
+  identity/.style={->, line width=0.85pt, dashed, draw=orange!85!black},
+  module/.style={rounded corners=2pt, minimum width=21mm, minimum height=11mm,
+    align=center, inner sep=1.5pt, line width=0.65pt},
+  msa/.style={module, draw=blue!62!black, fill=blue!7},
+  ocv/.style={module, draw=teal!67!black, fill=teal!7},
+  gbc/.style={module, draw=orange!78!black, fill=orange!10},
+  inherited/.style={module, minimum width=17mm, draw=red!62!black, fill=red!6},
+  norm/.style={draw=black!46, fill=black!4, rounded corners=1.5pt,
+    minimum width=8mm, minimum height=9mm, align=center},
+  gate/.style={draw=violet!68!black, fill=violet!8, circle, minimum size=7.6mm,
+    inner sep=0.5pt, line width=0.65pt, font=\sffamily\scriptsize\bfseries},
+  tensor/.style={draw=black!45, fill=white, rounded corners=1.5pt,
+    minimum width=9mm, minimum height=9mm, align=center},
+  note/.style={font=\sffamily\scriptsize, text=black!72}
+]
+
+% Main identity route for each local gate.
+\node[tensor] (x) at (0.48,2.35) {$\mathbf{X}$};
+\node[gate] (g1) at (3.32,2.35) {$\mathcal{G}_1$};
+\node[inherited] (deg) at (5.08,2.35) {Inherited\\DEGConv};
+\node[gate] (g2) at (8.05,2.35) {$\mathcal{G}_2$};
+\node[gate] (g3) at (11.02,2.35) {$\mathcal{G}_3$};
+\node[norm] (gn) at (12.20,2.35) {GN};
+\node[gate] (gf) at (13.42,2.35) {$\mathcal{G}_f$};
+\node[tensor] (y) at (15.02,2.35) {$\mathbf{Y}$};
+
+\draw[identity] (x) -- (g1);
+\draw[flow] (g1) -- node[note, below] {$\mathbf{X}_m$} (deg);
+\draw[identity] (deg) -- node[note, below] {$\mathbf{X}_d$} (g2);
+\draw[identity] (g2) -- node[note, below] {$\mathbf{X}_o$} (g3);
+\draw[flow] (g3) -- node[note, below] {$\mathbf{X}_g$} (gn);
+\draw[flow] (gn) -- (gf);
+\draw[flow] (gf) -- (y);
+
+% Candidate refinements enter their corresponding gates from above.
+\node[msa] (msa) at (1.72,4.05)
+  {\textbf{MSA}\\scale + axial context};
+\node[ocv] (ocv) at (6.57,4.05)
+  {\textbf{OCV}\\orientation + curvature};
+\node[gbc] (gbc) at (9.55,4.05)
+  {\textbf{GBC}\\gap + confidence};
+\draw[candidate] (x.north) |- (msa.west);
+\draw[candidate] (msa.east) -| (g1.north);
+\draw[candidate] (deg.north) |- (ocv.west);
+\draw[candidate] (ocv.east) -| (g2.north);
+\draw[candidate] (g2.north) |- (gbc.west);
+\draw[candidate] (gbc.east) -| (g3.north);
+
+% The stage-level identity bypass is separate from the three local gates.
+\draw[identity] (x.south) -- ++(0,-1.28) -| (gf.south);
+\node[note, fill=white, inner sep=1pt, text=orange!83!black]
+  at (6.95,0.79) {stage identity bypass};
+
+% Gate definition and initialization document the actual implementation.
+\node[draw=violet!34, fill=violet!2, rounded corners=2pt, align=center,
+  minimum width=105mm, minimum height=8mm, inner sep=1.5pt]
+  at (7.70,-0.02)
+  {$\mathcal{G}(\mathbf{A},f;\gamma)=\mathbf{A}+\gamma\,\sigma\!\left(\psi([\mathbf{A};f(\mathbf{A})])\right)
+  \odot(f(\mathbf{A})-\mathbf{A})$\quad
+  $\gamma_{1,2,3}=0.08,\ \gamma_f=1.0$ at initialization};
+
+\draw[flow] (0.30,5.12) -- (0.90,5.12);
+\node[note, anchor=west] at (0.98,5.12) {processed feature};
+\draw[candidate] (3.10,5.12) -- (3.70,5.12);
+\node[note, anchor=west] at (3.78,5.12) {candidate refinement};
+\draw[identity] (6.55,5.12) -- (7.15,5.12);
+\node[note, anchor=west] at (7.23,5.12) {identity input to a gate};
+
+\end{tikzpicture}
+\endgroup

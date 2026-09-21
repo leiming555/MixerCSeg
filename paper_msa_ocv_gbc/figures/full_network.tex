@@ -1,0 +1,95 @@
+\begin{tikzpicture}[
+    font=\sffamily\small,
+    >=Latex,
+    flow/.style={->, very thick, draw=gray!75!black},
+    skip/.style={->, thick, draw=blue!65!black},
+    callout/.style={->, thick, dashed, draw=blue!55!black},
+    enc/.style={draw, rounded corners=2pt, minimum width=24mm, minimum height=17mm,
+        align=center, fill=blue!8, draw=blue!60!black, inner sep=2.5pt,
+        font=\sffamily\footnotesize},
+    merge/.style={draw, rounded corners=2pt, minimum width=14mm, minimum height=12mm,
+        align=center, fill=gray!12, draw=gray!65, inner sep=2pt,
+        font=\sffamily\footnotesize},
+    proj/.style={draw, rounded corners=2pt, minimum width=32mm, minimum height=13mm,
+        align=center, fill=green!8, draw=green!55!black, inner sep=2pt,
+        font=\sffamily\footnotesize},
+    dec/.style={draw, rounded corners=2pt, minimum width=172mm, minimum height=13mm,
+        align=center, fill=orange!9, draw=orange!70!black, inner sep=3pt,
+        font=\sffamily\footnotesize},
+    head/.style={draw, rounded corners=2pt, minimum width=100mm, minimum height=13mm,
+        align=center, fill=purple!8, draw=purple!55!black, inner sep=3pt,
+        font=\sffamily\footnotesize},
+    io/.style={draw, rounded corners=2pt, minimum width=25mm, minimum height=13mm,
+        align=center, fill=gray!9, draw=gray!65, inner sep=3pt,
+        font=\sffamily\footnotesize},
+    stagebrace/.style={draw, rounded corners=2pt, dashed, draw=blue!50!black,
+        fill=blue!3, align=left, inner sep=4pt, font=\sffamily\footnotesize}
+]
+
+% Input and stem are stacked above the encoder chain to keep the figure readable
+% at journal column width.
+\node[io] (input) at (1.8,3.2) {RGB input\\$3\!\times\!512\!\times\!512$};
+\node[merge] (stem) at (1.8,1.65) {Stem\\two $s{=}2$ convs};
+\draw[flow] (input) -- (stem);
+
+% Repeated block definition.
+\node[stagebrace, minimum width=130mm] (gab) at (11.3,2.45) {
+\textbf{Geometry-aware block (GAB), repeated once per stage}\\[1mm]
+$\mathbf{X}\rightarrow\mathrm{MSA}\rightarrow\mathcal{G}_{1}
+\rightarrow\mathrm{DEGConv}\rightarrow\mathrm{OCV}\rightarrow\mathcal{G}_{2}
+\rightarrow\mathrm{GBC}\rightarrow\mathcal{G}_{3}
+\rightarrow\mathrm{GN}\rightarrow\mathcal{G}_{f}$};
+
+% Four-stage encoder, now within about 19 cm natural width.
+\node[enc] (s1) at (1.8,0) {Stage 1\\TransMixer + GAB\\$16\!\times\!128\!\times\!128$};
+\node[merge] (pm1) at (4.55,0) {Patch merge\\$s{=}2$};
+\node[enc] (s2) at (7.2,0) {Stage 2\\TransMixer + GAB\\$32\!\times\!64\!\times\!64$};
+\node[merge] (pm2) at (9.95,0) {Patch merge\\$s{=}2$};
+\node[enc] (s3) at (12.6,0) {Stage 3\\TransMixer + GAB\\$64\!\times\!32\!\times\!32$};
+\node[merge] (pm3) at (15.35,0) {Patch merge\\$s{=}2$};
+\node[enc] (s4) at (18.0,0) {Stage 4\\TransMixer + GAB\\$128\!\times\!16\!\times\!16$};
+
+\draw[flow] (stem) -- (s1);
+\draw[flow] (s1) -- (pm1);
+\draw[flow] (pm1) -- (s2);
+\draw[flow] (s2) -- (pm2);
+\draw[flow] (pm2) -- (s3);
+\draw[flow] (s3) -- (pm3);
+\draw[flow] (pm3) -- (s4);
+\draw[callout] (gab.south) -- (s3.north);
+
+% Per-level projections used by SRFModule.
+\node[proj] (p1) at (1.8,-2.65) {$F_1$: MLP $16{\rightarrow}8$\\$1{\times}1$ Conv + GN};
+\node[proj] (p2) at (7.2,-2.65) {$F_2$: MLP $32{\rightarrow}8$\\$1{\times}1$ Conv + GN};
+\node[proj] (p3) at (12.6,-2.65) {$F_3$: MLP $64{\rightarrow}8$\\$1{\times}1$ Conv + GN};
+\node[proj] (p4) at (18.0,-2.65) {$F_4$: MLP $128{\rightarrow}8$\\$1{\times}1$ Conv + GN};
+
+\draw[skip] (s1) -- (p1);
+\draw[skip] (s2) -- (p2);
+\draw[skip] (s3) -- (p3);
+\draw[skip] (s4) -- (p4);
+
+% Decoder follows the exact order in SRFModule.forward.
+\node[dec] (sr) at (9.9,-4.85) {\textbf{Spatial refinement:}\quad
+$A=\sigma(\mathrm{Conv}_{1\times1}(F_1))$;\quad
+$F_{2:4}\leftarrow\mathrm{Up}_{128\times128}(F_{2:4})\odot A$};
+\node[dec] (up) at (9.9,-6.55) {\textbf{Multi-level fusion:}\quad
+$F_{1:4}\rightarrow\mathrm{Up}_{512\times512}\rightarrow
+\mathrm{Concat}$ ($4\times8=32$ channels) $\rightarrow$
+Conv/GN $32{\rightarrow}32{\rightarrow}8$ + ReLU};
+\node[head] (pred) at (9.9,-8.25) {\textbf{Prediction head:}\quad
+$1{\times}1$ Conv $8{\rightarrow}2$ $\rightarrow$ depthwise $1{\times}1$
+$\rightarrow$ $1{\times}1$ Conv $2{\rightarrow}1{\rightarrow}1$};
+\node[io] (output) at (9.9,-9.8) {Crack logit map\\$1\!\times\!512\!\times\!512$};
+
+\foreach \p/\t in {p1/0.08,p2/0.36,p3/0.64,p4/0.92}{
+  \draw[skip] (\p.south) -- ($(sr.north west)!\t!(sr.north east)$);
+}
+\draw[flow] (sr) -- (up);
+\draw[flow] (up) -- (pred);
+\draw[flow] (pred) -- (output);
+
+\node[anchor=west, font=\scriptsize, text=gray!70!black] at (0,-10.65)
+{GN: group normalization; blue arrows: the four encoder outputs entering SRF.};
+
+\end{tikzpicture}

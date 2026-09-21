@@ -1,0 +1,67 @@
+% Orientation--Curvature Voting with separated derivative and voting lanes.
+\begingroup
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\sffamily\footnotesize,
+  >=Latex,
+  flow/.style={->, line width=0.9pt, draw=black!70},
+  cue/.style={->, line width=0.95pt, draw=teal!72!black},
+  skip/.style={->, line width=0.95pt, dashed, draw=orange!86!black},
+  panel/.style={draw=black!18, rounded corners=2pt, fill=black!0.5},
+  io/.style={draw=black!45, fill=white, rounded corners=1.5pt,
+    minimum width=14mm, minimum height=10mm, align=center, inner sep=2pt},
+  fixed/.style={draw=black!52, dashed, fill=black!3, rounded corners=2pt,
+    minimum height=10mm, align=center, inner sep=2pt},
+  op/.style={draw=teal!67!black, fill=teal!7, rounded corners=2pt,
+    minimum height=10mm, align=center, inner sep=2pt},
+  fusion/.style={draw=violet!62!black, fill=violet!6, rounded corners=2pt,
+    minimum height=10mm, align=center, inner sep=2pt},
+  note/.style={font=\sffamily\footnotesize, text=black!70}
+]
+
+\node[panel, minimum width=134mm, minimum height=68mm, anchor=south west]
+  at (0.05,0.05) {};
+\node[font=\sffamily\small\bfseries, text=teal!70!black, anchor=west]
+  at (0.35,6.55) {Orientation--Curvature Voting (OCV)};
+
+\node[io] (x) at (0.70,3.20) {Input\\$\mathbf{X}_d$};
+\node[fixed, minimum width=21mm] (sobel) at (2.55,5.00)
+  {Fixed Sobel\\$\mathbf{g}_x,\mathbf{g}_y$\\magnitude $\mathbf{M}$};
+\node[fixed, minimum width=21mm] (hessian) at (2.55,3.20)
+  {Fixed Hessian\\$\mathbf{D}_{xx},\mathbf{D}_{yy}$\\$\mathbf{D}_{xy}$};
+\node[op, minimum width=21mm] (axial) at (2.55,1.40)
+  {Learnable axial\\DWConv\\$1{\times}7,\ 7{\times}1$};
+\node[op, minimum width=18mm] (geometry) at (4.80,4.10)
+  {Ridge and\\curvature\\$\boldsymbol{\rho},\boldsymbol{\kappa}$};
+\node[op, minimum width=18mm] (orient) at (4.80,1.85)
+  {Orientation\\gates\\$\mathbf{H},\mathbf{V}$};
+\node[op, minimum width=15mm] (vote) at (6.55,2.85)
+  {Geometry\\vote\\$\mathbf{Q}$};
+\node[fusion, minimum width=19mm] (concat) at (8.35,3.20)
+  {Concatenate\\$\mathbf{X}_d,\mathbf{M},\rho,$\\$\kappa,\mathbf{Q}$; $5C$};
+\node[fusion, minimum width=16mm] (fuse) at (10.45,3.20)
+  {$1{\times}1$ Conv\\+ GN\\$5C{\to}C$};
+\node[io, minimum width=14mm] (out) at (12.25,3.20)
+  {OCV\\output};
+
+\draw[flow] (x.north east) -- (sobel.west);
+\draw[flow] (x.east) -- (hessian.west);
+\draw[flow] (x.south east) -- (axial.west);
+\draw[flow] (hessian.east) -- (geometry.west);
+\draw[flow] (axial.east) -- (orient.west);
+\draw[cue] (sobel.south east) -- ++(0.25,0) |- (orient.north west);
+\draw[cue] (geometry.east) -- (vote.north west);
+\draw[cue] (orient.east) -- (vote.south west);
+\draw[flow] (geometry.north) -- ++(0,1.25) -| (concat.north west);
+\draw[flow] (vote.east) -- (concat.west);
+\draw[flow] (sobel.north) -- ++(0,0.52) -| (concat.north);
+\draw[skip] (x.north) -- ++(0,2.52) -| (concat.north east);
+\draw[flow] (concat) -- (fuse);
+\draw[flow] (fuse) -- (out);
+
+\node[note, anchor=west] at (0.35,0.35)
+  {Dashed boxes are fixed filters; solid teal boxes contain learnable operations.};
+
+\end{tikzpicture}
+\endgroup

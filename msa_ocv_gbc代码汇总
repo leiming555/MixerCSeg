@@ -1,0 +1,526 @@
+"""Self-contained code summary for TripleStack-v3 mode ``msa_ocv_gbc``.
+
+Actual encoder path used by the project:
+
+    TransMixer
+        -> MultiScaleAxialConditioner (MSA)
+        -> HoGEdgeGateConv (original DEGConv path)
+        -> OrientationCurvatureVoting (OCV)
+        -> GapBoundaryConfidence (GBC)
+        -> gated residual output
+
+The production implementation is wired in ``models/encoder/vss_block.py`` and
+implemented across these source files:
+
+    models/experimental_triple_stack_v3.py
+    models/experimental_modules.py
+    models/layers/hog_edge.py
+
+This file is a readable, executable summary. The training code does not import
+it, so editing this summary does not change trained models.
+
+Training example:
+
+    CUDA_VISIBLE_DEVICES=0 python -u main.py \
+      --dataset_path dataset/CrackMap \
+      --nbins 180 \
+      --seed 42 \
+      --epochs 50 \
+      --BCELoss_ratio 0.87 \
+      --DiceLoss_ratio 0.13 \
+      --output_dir work_dirs/msa_ocv_gbc \
+      --use_triple_stack_v3 \
+      --triple_stack_v3_mode msa_ocv_gbc
+"""
+
+import einops
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+MODE = "msa_ocv_gbc"
+
+
+def make_gn(num_channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    """Use the same channel-compatible GroupNorm selection as the project."""
+    for groups in (max_groups, 4, 2, 1):
+        if num_channels % groups == 0:
+            return nn.GroupNorm(groups, num_channels)
+    return nn.GroupNorm(1, num_channels)
+
+
+class ConvGNAct(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size=3,
+        padding=1,
+        dilation=1,
+        groups=1,
+        act=True,
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+            bias=False,
+        )
+        self.norm = make_gn(out_channels)
+        self.act = nn.SiLU(inplace=True) if act else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.norm(self.conv(x)))
+
+
+class EdgeConv(nn.Module):
+    """Cross-axis depthwise convolution used by HoGEdgeGateConv."""
+
+    def __init__(
+        self,
+        in_channels,
+        mid_channels,
+        out_channels,
+        kernel_size=3,
+        bias=True,
+    ):
+        super().__init__()
+        self.in_proj = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=mid_channels,
+            kernel_size=1,
+            bias=bias,
+        )
+        self.w_conv = nn.Conv2d(
+            mid_channels,
+            mid_channels,
+            kernel_size=(1, kernel_size),
+            stride=1,
+            padding=(0, kernel_size // 2),
+            groups=mid_channels,
+        )
+        self.h_conv = nn.Conv2d(
+            mid_channels,
+            mid_channels,
+            kernel_size=(kernel_size, 1),
+            stride=1,
+            padding=(kernel_size // 2, 0),
+            groups=mid_channels,
+        )
+        self.out_proj = nn.Conv2d(
+            in_channels=mid_channels * 2,
+            out_channels=out_channels,
+            kernel_size=1,
+            bias=True,
+        )
+
+    def forward(self, x):
+        x = self.in_proj(x)
+        x_w = self.w_conv(x)
+        x_h = self.h_conv(x)
+        return self.out_proj(torch.cat([x_w, x_h], dim=1))
+
+
+def image2patches(x):
+    """b c (hg h) (wg w) -> (hg wg b) c h w"""
+    return einops.rearrange(
+        x,
+        "b c (hg h) (wg w) -> (hg wg b) c h w",
+        hg=2,
+        wg=2,
+    )
+
+
+def patches2image(x):
+    """(hg wg b) c h w -> b c (hg h) (wg w)"""
+    return einops.rearrange(
+        x,
+        "(hg wg b) c h w -> b c (hg h) (wg w)",
+        hg=2,
+        wg=2,
+    )
+
+
+class HoGEdgeGateConv(nn.Module):
+    """Original HoG-guided edge-gated convolution retained by TripleStack-v3."""
+
+    def __init__(self, in_dim, nbins, cell_size=(8, 8)):
+        super().__init__()
+        self.nbins = nbins
+        self.cell_size = cell_size
+
+        self.hog_feat = nn.Sequential(
+            nn.Conv2d(nbins, in_dim, kernel_size=1),
+            nn.Conv2d(
+                in_dim,
+                in_dim,
+                kernel_size=3,
+                padding=1,
+                groups=in_dim,
+                bias=False,
+            ),
+            nn.GroupNorm(in_dim // 8, in_dim),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        self.weight = nn.Sequential(
+            EdgeConv(
+                in_channels=in_dim,
+                mid_channels=in_dim // 2,
+                out_channels=in_dim,
+            ),
+            nn.GroupNorm(in_dim // 8, in_dim),
+        )
+        self.conv = nn.Sequential(
+            nn.Conv2d(
+                in_channels=in_dim,
+                out_channels=in_dim,
+                kernel_size=1,
+                stride=1,
+            ),
+            nn.GroupNorm(in_dim // 8, in_dim),
+        )
+        self.fuse_block = nn.Sequential(
+            EdgeConv(
+                in_channels=in_dim,
+                mid_channels=in_dim // 2,
+                out_channels=in_dim,
+                kernel_size=3,
+            ),
+            nn.GroupNorm(in_dim // 8, in_dim),
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        residual = x
+        x = image2patches(x)
+        x_hog = self.hog_feat(self.get_hog_feature(x))
+        x1 = self.sigmoid(self.weight(x + x_hog))
+        x2 = self.conv(x)
+        x = patches2image(x1 * x2)
+        return self.fuse_block(x + residual)
+
+    def get_hog_feature(self, x):
+        x_mean = x.mean(dim=1, keepdim=True)
+        batch, _, height, width = x_mean.shape
+        device = x_mean.device
+
+        sobel_x = torch.tensor(
+            [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+            dtype=torch.float32,
+        ).view(1, 1, 3, 3).to(device)
+        sobel_y = torch.tensor(
+            [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+            dtype=torch.float32,
+        ).view(1, 1, 3, 3).to(device)
+        dx = F.conv2d(x_mean.float(), sobel_x, padding=1)
+        dy = F.conv2d(x_mean.float(), sobel_y, padding=1)
+
+        gradient_dir = torch.abs(torch.atan2(dy, dx))
+        cell_h, cell_w = self.cell_size
+        height_cells = int(height / cell_h)
+        width_cells = int(width / cell_w)
+        dirs_crop = gradient_dir[
+            :,
+            :,
+            : height_cells * cell_h,
+            : width_cells * cell_w,
+        ]
+        dirs = dirs_crop.view(batch, height_cells, width_cells, -1)
+
+        bin_width = torch.pi / self.nbins
+        bin_indices = torch.clamp(
+            (dirs / bin_width).floor().long(),
+            0,
+            self.nbins - 1,
+        )
+        bin_indices_flat = bin_indices.view(
+            batch * height_cells * width_cells,
+            dirs.shape[-1],
+        )
+        weight = []
+        for bins in bin_indices_flat:
+            weight.append(torch.bincount(bins, minlength=self.nbins))
+        weight = torch.stack(weight, dim=0).view(
+            batch,
+            height_cells,
+            width_cells,
+            -1,
+        ) / 64
+
+        start = torch.pi / (2 * self.nbins)
+        hog_feature = (
+            torch.linspace(start, torch.pi - start, self.nbins)
+            .to(device)
+            .repeat(batch, height_cells, width_cells, 1)
+            * weight
+        )
+        return hog_feature.permute(0, 3, 1, 2)
+
+
+def _depthwise_filter(x, kernel, padding=1):
+    kernel = kernel.to(device=x.device, dtype=x.dtype)
+    return F.conv2d(
+        x,
+        kernel.repeat(x.shape[1], 1, 1, 1),
+        padding=padding,
+        groups=x.shape[1],
+    )
+
+
+class DifferentialKernelsMixin:
+    """Fixed Hessian and Sobel kernels used by OCV."""
+
+    def _init_diff_kernels(self):
+        dxx = torch.tensor(
+            [[0.0, 0.0, 0.0], [1.0, -2.0, 1.0], [0.0, 0.0, 0.0]]
+        ).view(1, 1, 3, 3)
+        dyy = torch.tensor(
+            [[0.0, 1.0, 0.0], [0.0, -2.0, 0.0], [0.0, 1.0, 0.0]]
+        ).view(1, 1, 3, 3)
+        dxy = (
+            torch.tensor(
+                [[1.0, 0.0, -1.0], [0.0, 0.0, 0.0], [-1.0, 0.0, 1.0]]
+            ).view(1, 1, 3, 3)
+            * 0.25
+        )
+        sx = torch.tensor(
+            [[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]]
+        ).view(1, 1, 3, 3)
+        sy = sx.transpose(-1, -2)
+        lap = torch.tensor(
+            [[0.0, 1.0, 0.0], [1.0, -4.0, 1.0], [0.0, 1.0, 0.0]]
+        ).view(1, 1, 3, 3)
+        self.register_buffer("dxx", dxx)
+        self.register_buffer("dyy", dyy)
+        self.register_buffer("dxy", dxy)
+        self.register_buffer("sx", sx)
+        self.register_buffer("sy", sy)
+        self.register_buffer("lap", lap)
+
+    def _hessian_ridge(self, x):
+        dxx = _depthwise_filter(x, self.dxx)
+        dyy = _depthwise_filter(x, self.dyy)
+        dxy = _depthwise_filter(x, self.dxy)
+        ridge = torch.sqrt((dxx - dyy).pow(2) + 4.0 * dxy.pow(2) + 1e-6)
+        return dxx, dyy, dxy, ridge
+
+    def _sobel(self, x):
+        gx = _depthwise_filter(x, self.sx)
+        gy = _depthwise_filter(x, self.sy)
+        magnitude = torch.sqrt(gx.pow(2) + gy.pow(2) + 1e-6)
+        return gx, gy, magnitude
+
+
+class MultiScaleAxialConditioner(nn.Module):
+    """MSA: multi-scale axial context before HoGEdgeGateConv."""
+
+    def __init__(self, channels: int):
+        super().__init__()
+        self.h = ConvGNAct(
+            channels,
+            channels,
+            kernel_size=(1, 9),
+            padding=(0, 4),
+            groups=channels,
+        )
+        self.v = ConvGNAct(
+            channels,
+            channels,
+            kernel_size=(9, 1),
+            padding=(4, 0),
+            groups=channels,
+        )
+        self.dh = ConvGNAct(
+            channels,
+            channels,
+            kernel_size=(1, 5),
+            padding=(0, 4),
+            dilation=(1, 2),
+            groups=channels,
+        )
+        self.dv = ConvGNAct(
+            channels,
+            channels,
+            kernel_size=(5, 1),
+            padding=(4, 0),
+            dilation=(2, 1),
+            groups=channels,
+        )
+        self.fuse = ConvGNAct(
+            channels * 5,
+            channels,
+            kernel_size=1,
+            padding=0,
+            act=False,
+        )
+
+    def forward(self, x):
+        row = x.mean(dim=-1, keepdim=True).expand_as(x)
+        col = x.mean(dim=-2, keepdim=True).expand_as(x)
+        axial = self.h(x) + self.v(x) + self.dh(x) + self.dv(x)
+        return self.fuse(torch.cat([x, axial, row, col, row * col], dim=1))
+
+
+class OrientationCurvatureVoting(nn.Module, DifferentialKernelsMixin):
+    """OCV: Hessian/Sobel orientation voting after HoGEdgeGateConv."""
+
+    def __init__(self, channels: int):
+        super().__init__()
+        self._init_diff_kernels()
+        self.h = ConvGNAct(
+            channels,
+            channels,
+            kernel_size=(1, 7),
+            padding=(0, 3),
+            groups=channels,
+        )
+        self.v = ConvGNAct(
+            channels,
+            channels,
+            kernel_size=(7, 1),
+            padding=(3, 0),
+            groups=channels,
+        )
+        self.fuse = ConvGNAct(
+            channels * 5,
+            channels,
+            kernel_size=1,
+            padding=0,
+            act=False,
+        )
+
+    def forward(self, x):
+        dxx, dyy, dxy, ridge = self._hessian_ridge(x)
+        gx, gy, magnitude = self._sobel(x)
+        horizontal = torch.sigmoid(torch.abs(gx) - torch.abs(gy)) * self.h(x)
+        vertical = torch.sigmoid(torch.abs(gy) - torch.abs(gx)) * self.v(x)
+        curvature = torch.sqrt((dxx + dyy).pow(2) + dxy.pow(2) + 1e-6)
+        vote = torch.sigmoid(ridge - curvature) * (horizontal + vertical)
+        return self.fuse(
+            torch.cat([x, magnitude, ridge, curvature, vote], dim=1)
+        )
+
+
+class GapBoundaryConfidence(nn.Module):
+    """GBC: uncertainty-aware gap filling and boundary calibration."""
+
+    def __init__(self, channels: int):
+        super().__init__()
+        self.spatial = nn.Conv2d(3, 1, kernel_size=5, padding=2)
+        self.fuse = ConvGNAct(
+            channels * 5,
+            channels,
+            kernel_size=1,
+            padding=0,
+            act=False,
+        )
+
+    def forward(self, x):
+        probability = torch.sigmoid(x)
+        entropy = -(
+            probability * torch.log(probability + 1e-6)
+            + (1.0 - probability) * torch.log(1.0 - probability + 1e-6)
+        )
+        local = F.avg_pool2d(x, kernel_size=3, stride=1, padding=1)
+        gap = torch.clamp(
+            F.max_pool2d(x, kernel_size=5, stride=1, padding=2) - x,
+            min=0.0,
+        )
+        boundary = torch.abs(x - local)
+        confidence = torch.sigmoid(
+            self.spatial(
+                torch.cat(
+                    [
+                        gap.amax(dim=1, keepdim=True),
+                        boundary.mean(dim=1, keepdim=True),
+                        entropy.mean(dim=1, keepdim=True),
+                    ],
+                    dim=1,
+                )
+            )
+        )
+        bridge = x * (1.0 - confidence) + gap * confidence
+        return self.fuse(torch.cat([x, gap, boundary, entropy, bridge], dim=1))
+
+
+class TripleStackV3Block(nn.Module):
+    """Exact TripleStack-v3 composition for mode ``msa_ocv_gbc``."""
+
+    def __init__(self, channels: int, nbins: int, mode: str = MODE):
+        super().__init__()
+        if mode != MODE:
+            raise ValueError(f"This summary only implements mode {MODE}, got {mode}")
+
+        self.mode = mode
+        self.point1 = MultiScaleAxialConditioner(channels)
+        self.deg = HoGEdgeGateConv(in_dim=channels, nbins=nbins)
+        self.point2 = OrientationCurvatureVoting(channels)
+        self.point3 = GapBoundaryConfidence(channels)
+
+        self.point1_gate = nn.Conv2d(channels * 2, channels, kernel_size=1)
+        self.point2_gate = nn.Conv2d(channels * 2, channels, kernel_size=1)
+        self.point3_gate = nn.Conv2d(channels * 2, channels, kernel_size=1)
+        self.final_gate = nn.Conv2d(channels * 2, channels, kernel_size=1)
+        self.final_norm = make_gn(channels)
+
+        self.point1_gamma = nn.Parameter(torch.tensor(0.08))
+        self.point2_gamma = nn.Parameter(torch.tensor(0.08))
+        self.point3_gamma = nn.Parameter(torch.tensor(0.08))
+        self.final_gamma = nn.Parameter(torch.tensor(1.0))
+
+    @staticmethod
+    def _residual_gate(x, refined, gate, gamma):
+        weight = torch.sigmoid(gate(torch.cat([x, refined], dim=1)))
+        return x + gamma * weight * (refined - x)
+
+    def forward(self, x):
+        identity = x
+        point1 = self._residual_gate(
+            x,
+            self.point1(x),
+            self.point1_gate,
+            self.point1_gamma,
+        )
+        deg = self.deg(point1)
+        point2 = self._residual_gate(
+            deg,
+            self.point2(deg),
+            self.point2_gate,
+            self.point2_gamma,
+        )
+        point3 = self._residual_gate(
+            point2,
+            self.point3(point2),
+            self.point3_gate,
+            self.point3_gamma,
+        )
+        point3 = self.final_norm(point3)
+        return self._residual_gate(
+            identity,
+            point3,
+            self.final_gate,
+            self.final_gamma,
+        )
+
+
+# Actual VSS integration pattern:
+#
+# layers = [
+#     TransMixer(
+#         hidden_dim=in_dim,
+#         ssm_d_state=state_dim,
+#         mlp_ratio=mlp_ratio,
+#         channel_first=True,
+#     ),
+#     TripleStackV3Block(
+#         channels=in_dim,
+#         nbins=nbins,
+#         mode="msa_ocv_gbc",
+#     ),
+# ]

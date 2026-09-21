@@ -1,0 +1,107 @@
+% Exact TripleStackV3Block data flow, unfolded into three spacious rows.
+\begingroup
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\sffamily\footnotesize,
+  >=Latex,
+  flow/.style={->, line width=0.9pt, draw=black!72},
+  candidate/.style={->, line width=0.95pt, draw=teal!72!black},
+  identity/.style={->, line width=0.95pt, dashed, draw=orange!86!black},
+  transfer/.style={->, line width=0.8pt, draw=blue!58!black},
+  band/.style={draw=black!17, rounded corners=2pt, fill=black!1},
+  module/.style={rounded corners=2pt, minimum width=22mm, minimum height=10mm,
+    align=center, inner sep=2pt, line width=0.65pt},
+  msa/.style={module, draw=blue!62!black, fill=blue!7},
+  ocv/.style={module, draw=teal!67!black, fill=teal!7},
+  gbc/.style={module, draw=orange!78!black, fill=orange!10},
+  inherited/.style={module, minimum width=16mm, draw=red!62!black, fill=red!6},
+  gate/.style={draw=violet!68!black, fill=violet!8, rounded corners=2pt,
+    minimum width=15mm, minimum height=10mm, align=center, inner sep=1.5pt,
+    line width=0.7pt, font=\sffamily\footnotesize\bfseries},
+  tensor/.style={draw=black!45, fill=white, rounded corners=1.5pt,
+    minimum width=10mm, minimum height=9mm, align=center, inner sep=1.5pt},
+  note/.style={font=\sffamily\footnotesize, text=black!70},
+  rowtitle/.style={font=\sffamily\footnotesize\bfseries, anchor=west}
+]
+
+% Legend is isolated above the computational graph.
+\draw[flow] (0.25,8.72) -- (0.75,8.72);
+\node[note, anchor=west] at (0.85,8.72) {main flow};
+\draw[candidate] (2.70,8.72) -- (3.20,8.72);
+\node[note, anchor=west] at (3.30,8.72) {candidate};
+\draw[identity] (5.35,8.72) -- (5.85,8.72);
+\node[note, anchor=west] at (5.95,8.72) {identity};
+\node[note, anchor=east] at (13.30,8.72)
+  {$\gamma_{1,2,3}=0.08;\ \gamma_f=1.0$ initially};
+
+% Step 1: MSA gate followed by the inherited DEGConv.
+\node[band, minimum width=132mm, minimum height=25mm, anchor=south west]
+  at (0.18,5.55) {};
+\node[rowtitle, text=blue!68!black] at (1.55,7.78)
+  {Step 1: scale conditioning before DEGConv};
+\node[tensor] (x) at (0.78,6.15) {$\mathbf{X}$};
+\node[msa] (msa) at (2.80,6.95) {MSA\\scale / axial\\context};
+\node[gate] (g1) at (5.20,6.15) {Gate $\mathcal{G}_1$};
+\node[tensor] (xm) at (6.65,6.15) {$\mathbf{X}_m$};
+\node[inherited] (deg) at (8.20,6.15) {Inherited\\DEGConv};
+\node[tensor] (xd) at (9.65,6.15) {$\mathbf{X}_d$};
+\draw[identity] (x.east) -- (g1.west);
+\draw[candidate] (x.north) -- ++(0,0.65) -- (msa.west);
+\draw[candidate] (msa.east) -- ++(0.45,0) -| (g1.north);
+\draw[flow] (g1) -- (xm);
+\draw[flow] (xm) -- (deg);
+\draw[flow] (deg) -- (xd);
+
+% Step 2: orientation and curvature vote.
+\node[band, minimum width=132mm, minimum height=25mm, anchor=south west]
+  at (0.18,2.85) {};
+\node[rowtitle, text=teal!70!black] at (1.55,5.08)
+  {Step 2: differential geometry refinement};
+% Draw the receiving node after the band so that the background cannot cover it.
+\node[tensor] (xd2) at (0.78,3.45) {$\mathbf{X}_d$};
+\draw[transfer] (xd.east) -- (13.05,6.15) -- (13.05,5.46)
+  -- (0.78,5.46) -- (xd2.north);
+\node[note, anchor=east, fill=white, inner sep=1pt] at (12.85,5.46)
+  {to Step 2};
+\node[ocv] (ocv) at (2.80,4.25) {OCV\\orientation /\\curvature};
+\node[gate] (g2) at (5.20,3.45) {Gate $\mathcal{G}_2$};
+\node[tensor] (xo) at (6.65,3.45) {$\mathbf{X}_o$};
+\draw[identity] (xd2.east) -- (g2.west);
+\draw[candidate] (xd2.north) -- ++(0,0.65) -- (ocv.west);
+\draw[candidate] (ocv.east) -- ++(0.45,0) -| (g2.north);
+\draw[flow] (g2) -- (xo);
+
+% Step 3: gap confidence, normalization, and the stage-level gate.
+\node[band, minimum width=132mm, minimum height=25mm, anchor=south west]
+  at (0.18,0.15) {};
+\node[rowtitle, text=orange!82!black] at (1.55,2.38)
+  {Step 3: confidence refinement and stage-level residual};
+% Draw the receiving node after the band so that the background cannot cover it.
+\node[tensor] (xo2) at (0.78,0.75) {$\mathbf{X}_o$};
+\draw[transfer] (xo.east) -- (13.05,3.45) -- (13.05,2.76)
+  -- (0.78,2.76) -- (xo2.north);
+\node[note, anchor=east, fill=white, inner sep=1pt] at (12.85,2.76)
+  {to Step 3};
+\node[gbc] (gbc) at (2.80,1.55) {GBC\\gap / boundary\\confidence};
+\node[gate] (g3) at (5.20,0.75) {Gate $\mathcal{G}_3$};
+\node[tensor] (xg) at (6.65,0.75) {$\mathbf{X}_g$};
+\node[tensor, minimum width=10mm] (gn) at (7.90,0.75) {GN};
+\node[gate] (gf) at (9.55,0.75) {Final gate\\$\mathcal{G}_f$};
+\node[tensor] (y) at (11.10,0.75) {$\mathbf{Y}$};
+\draw[identity] (xo2.east) -- (g3.west);
+\draw[candidate] (xo2.north) -- ++(0,0.65) -- (gbc.west);
+\draw[candidate] (gbc.east) -- ++(0.45,0) -| (g3.north);
+\draw[flow] (g3) -- (xg);
+\draw[flow] (xg) -- (gn);
+\draw[flow] (gn) -- (gf);
+\draw[flow] (gf) -- (y);
+
+% Stage identity remains on its own outer lane.
+\draw[identity] (x.west) -- (0.02,6.15) -- (0.02,-0.18)
+  -- (9.55,-0.18) -- (gf.south);
+\node[note, text=orange!86!black, fill=white, inner sep=1pt]
+  at (4.75,-0.18) {stage identity bypass from $\mathbf{X}$};
+
+\end{tikzpicture}
+\endgroup

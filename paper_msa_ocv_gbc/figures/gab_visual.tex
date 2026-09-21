@@ -1,0 +1,143 @@
+% Spacious expansion of one geometry-aware block (GAB).
+% Short labels are used here; exact tensor equations remain in module_details.tex.
+\newcommand{\gabfeature}[7]{%
+  \begin{scope}[shift={(#2,#3)}]
+    \foreach \k in {3,2,1,0}{
+      \draw[draw=#4!72!black, fill=#4!20, line width=0.45pt]
+        ({-#5/2+0.075*\k},{-#6/2+0.075*\k}) rectangle
+        ({ #5/2+0.075*\k},{ #6/2+0.075*\k});
+    }
+  \end{scope}
+  \node[minimum width=#5cm, minimum height=#6cm, inner sep=0pt] (#1) at (#2,#3) {};
+  \node[font=\sffamily\scriptsize, align=center, anchor=north]
+    at ($(#1.south)+(0,-0.13)$) {#7};
+}
+
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  >=Latex,
+  flow/.style={->, very thick, draw=black!72},
+  branch/.style={->, thick, draw=black!58},
+  cue/.style={->, thick, draw=teal!70!black},
+  residual/.style={->, thick, dashed, draw=orange!82!black},
+  region/.style={draw, rounded corners=3pt, line width=0.65pt},
+  msaop/.style={draw=blue!58!black, fill=blue!8, rounded corners=1.5pt,
+    minimum width=13mm, minimum height=7mm, align=center, inner sep=1.5pt},
+  ocvop/.style={draw=green!52!black, fill=green!8, rounded corners=1.5pt,
+    minimum width=14mm, minimum height=7mm, align=center, inner sep=1.5pt},
+  gbcop/.style={draw=orange!72!black, fill=orange!11, rounded corners=1.5pt,
+    minimum width=14mm, minimum height=7mm, align=center, inner sep=1.5pt},
+  fuse/.style={draw=black!60, fill=white, rounded corners=1.5pt,
+    text width=16mm, minimum width=18mm, minimum height=17mm,
+    align=center, inner sep=1.5pt},
+  deg/.style={draw=red!62!black, fill=red!8, rounded corners=2pt,
+    minimum width=12mm, minimum height=17mm, align=center, inner sep=1.5pt},
+  gate/.style={draw=black!68, circle, fill=yellow!17, minimum size=6.1mm,
+    inner sep=0.3pt, font=\sffamily\scriptsize\bfseries},
+  norm/.style={draw=gray!65, fill=gray!10, rounded corners=1.5pt,
+    minimum width=7mm, minimum height=10mm, align=center, inner sep=1pt},
+  title/.style={font=\sffamily\small\bfseries, anchor=west}
+]
+
+\filldraw[region, fill=gray!1, draw=gray!24] (0,0) rectangle (22.55,8.05);
+\node[title] at (0.28,7.73) {Geometry-aware block (GAB) inserted after each TransMixer};
+
+\gabfeature{xin}{0.55}{4.55}{cyan}{0.54}{1.15}{$\mathbf{X}$}
+
+% ------------------------------------------------------------------
+% MSA: multi-scale axial and row/column conditioning.
+% ------------------------------------------------------------------
+\filldraw[region, fill=blue!2, draw=blue!28] (1.12,1.55) rectangle (5.65,7.12);
+\node[font=\sffamily\small\bfseries, text=blue!65!black] at (3.38,6.82)
+  {MSA};
+\node[msaop] (m19) at (2.05,5.92) {DW $1{\times}9$};
+\node[msaop] (m91) at (2.05,4.92) {DW $9{\times}1$};
+\node[msaop] (mdil) at (2.05,3.92) {Dilated axial};
+\node[msaop] (mrc) at (2.05,2.72) {Row / column};
+\node[fuse, minimum height=20mm] (mfuse) at (4.55,4.45)
+  {Multi-scale\\fusion\\$1{\times}1$ Conv + GN};
+
+\draw[branch] (xin.east) -- ++(0.30,0) |- (m19.west);
+\draw[branch] (xin.east) -- ++(0.30,0) |- (m91.west);
+\draw[branch] (xin.east) -- ++(0.30,0) |- (mdil.west);
+\draw[branch] (xin.east) -- ++(0.30,0) |- (mrc.west);
+\draw[branch] (m19.east) -- (mfuse.west);
+\draw[branch] (m91.east) -- (mfuse.west);
+\draw[branch] (mdil.east) -- (mfuse.west);
+\draw[branch] (mrc.east) -- (mfuse.south west);
+
+\gabfeature{xm}{6.02}{4.55}{blue}{0.46}{0.96}{$\mathbf{X}_m$}
+\node[gate] (g1) at (6.70,4.55) {$\mathcal{G}_1$};
+\node[deg] (deg) at (7.58,4.55) {DEG\\Conv};
+\draw[flow] (mfuse) -- (xm.west);
+\draw[flow] (xm) -- (g1);
+\draw[flow] (g1) -- (deg);
+
+% ------------------------------------------------------------------
+% OCV: first-/second-order cues and learnable orientation voting.
+% ------------------------------------------------------------------
+\filldraw[region, fill=green!2, draw=green!28] (8.24,1.55) rectangle (13.97,7.12);
+\node[font=\sffamily\small\bfseries, text=green!48!black] at (11.10,6.82)
+  {OCV};
+\node[ocvop] (sobel) at (9.20,5.72) {Sobel\\$M$};
+\node[ocvop] (hessian) at (9.20,4.45) {Hessian\\$\rho,\kappa$};
+\node[ocvop] (axial) at (9.20,3.18) {Axial filters\\$H,V$};
+\node[ocvop, minimum width=13mm, minimum height=11mm] (vote) at (10.95,4.02)
+  {Vote\\$Q$};
+\node[fuse, minimum height=20mm] (ofuse) at (12.88,4.55)
+  {Geometry\\fusion\\$1{\times}1$ Conv + GN};
+
+\draw[cue] (deg.east) -- ++(0.30,0) |- (sobel.west);
+\draw[cue] (deg.east) -- ++(0.30,0) |- (hessian.west);
+\draw[cue] (deg.east) -- ++(0.30,0) |- (axial.west);
+\draw[cue] (hessian.east) -- (vote.west);
+\draw[cue] (axial.east) -- (vote.south west);
+\draw[cue] (sobel.east) -- (ofuse.north west);
+\draw[cue] (hessian.east) -- (ofuse.west);
+\draw[cue] (vote.east) -- (ofuse.south west);
+
+\gabfeature{xo}{14.34}{4.55}{green}{0.46}{0.96}{$\mathbf{X}_o$}
+\node[gate] (g2) at (15.02,4.55) {$\mathcal{G}_2$};
+\draw[flow] (ofuse) -- (xo.west);
+\draw[flow] (xo) -- (g2);
+
+% ------------------------------------------------------------------
+% GBC: confidence-guided bridge construction and fusion.
+% ------------------------------------------------------------------
+\filldraw[region, fill=orange!3, draw=orange!34] (15.56,1.55) rectangle (20.22,7.12);
+\node[font=\sffamily\small\bfseries, text=orange!76!black] at (17.89,6.82)
+  {GBC};
+\node[gbcop] (gap) at (16.34,5.72) {Gap $\Delta$};
+\node[gbcop] (boundary) at (16.34,4.55) {Boundary $B$};
+\node[gbcop] (entropy) at (16.34,3.38) {Entropy $E$};
+\node[gbcop, minimum width=14mm] (conf) at (17.84,5.24) {Conf. map\\$C_g$};
+\node[gbcop, minimum width=15mm] (bridge) at (17.84,3.86) {Bridge\\$Z$};
+\node[fuse, text width=13mm, minimum width=15mm, minimum height=20mm] (gfuse) at (19.38,4.55)
+  {All-cue\\fusion\\$1{\times}1$ Conv};
+
+\draw[branch] (g2.east) -- ++(0.27,0) |- (gap.west);
+\draw[branch] (g2.east) -- ++(0.27,0) |- (boundary.west);
+\draw[branch] (g2.east) -- ++(0.27,0) |- (entropy.west);
+\draw[cue] (gap.east) -- (conf.west);
+\draw[cue] (boundary.east) -- (conf.west);
+\draw[cue] (entropy.east) -- (bridge.west);
+\draw[cue] (conf) -- (bridge);
+\draw[cue] (bridge.east) -- (gfuse.west);
+
+\node[gate] (g3) at (20.58,4.55) {$\mathcal{G}_3$};
+\node[norm] (gn) at (21.20,4.55) {GN};
+\node[gate] (gf) at (21.78,4.55) {$\mathcal{G}_f$};
+\gabfeature{yout}{22.20}{4.55}{violet}{0.46}{1.02}{$\mathbf{Y}$}
+\draw[flow] (gfuse) -- (g3);
+\draw[flow] (g3) -- (gn);
+\draw[flow] (gn) -- (gf);
+\draw[flow] (gf) -- (yout.west);
+
+% Stage-level identity route is kept completely below the module regions.
+\draw[residual] (xin.south) -- ++(0,-3.42) -| (gf.south);
+\node[font=\sffamily\scriptsize, fill=white, inner sep=1.2pt, text=orange!80!black]
+  at (11.10,0.66) {stage-level residual carried to the final gate $\mathcal{G}_f$};
+
+\node[font=\sffamily\scriptsize, text=gray!68!black, anchor=west]
+  at (0.30,0.18) {Solid black: learnable feature path; teal: geometry/confidence cues; dashed orange: identity path.};
+\end{tikzpicture}

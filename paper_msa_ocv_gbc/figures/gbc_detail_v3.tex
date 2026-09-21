@@ -1,0 +1,73 @@
+% Gap--Boundary Confidence with an explicit non-parametric cue-routing bus.
+\begingroup
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\sffamily\footnotesize,
+  >=Latex,
+  flow/.style={->, line width=0.9pt, draw=black!70},
+  cue/.style={->, line width=0.95pt, draw=teal!72!black},
+  skip/.style={->, line width=0.95pt, dashed, draw=orange!86!black},
+  panel/.style={draw=black!18, rounded corners=2pt, fill=black!0.5},
+  io/.style={draw=black!45, fill=white, rounded corners=1.5pt,
+    minimum width=14mm, minimum height=10mm, align=center, inner sep=2pt},
+  op/.style={draw=orange!78!black, fill=orange!9, rounded corners=2pt,
+    minimum height=10mm, align=center, inner sep=2pt},
+  routing/.style={draw=teal!58!black, dashed, fill=teal!3, rounded corners=2pt,
+    minimum width=16mm, minimum height=24mm, align=center, inner sep=2pt},
+  fusion/.style={draw=violet!62!black, fill=violet!6, rounded corners=2pt,
+    minimum height=10mm, align=center, inner sep=2pt},
+  note/.style={font=\sffamily\footnotesize, text=black!70}
+]
+
+\node[panel, minimum width=134mm, minimum height=68mm, anchor=south west]
+  at (0.05,0.05) {};
+\node[font=\sffamily\small\bfseries, text=orange!82!black, anchor=west]
+  at (0.35,6.55) {Gap--Boundary Confidence (GBC)};
+
+\node[io] (x) at (0.70,3.25) {Input\\$\mathbf{X}_o$};
+\node[op, minimum width=22mm] (entropy) at (2.60,5.05)
+  {Sigmoid + entropy\\$\mathbf{E}$};
+\node[op, minimum width=22mm] (boundary) at (2.60,3.25)
+  {$3{\times}3$ local mean\\boundary $\mathbf{B}$};
+\node[op, minimum width=22mm] (gap) at (2.60,1.45)
+  {$5{\times}5$ MaxPool\\gap $\boldsymbol{\Delta}$};
+\node[routing, minimum width=14mm, minimum height=14mm] (pack) at (4.65,3.25)
+  {Cue pack\\$\Delta,B,E$};
+\node[op, minimum width=17mm] (summary) at (6.20,4.80)
+  {Channel\\summaries};
+\node[op, minimum width=18mm] (confidence) at (8.10,4.80)
+  {$5{\times}5$ Conv\\+ sigmoid\\confidence $\mathbf{C}_g$};
+\node[op, minimum width=18mm] (bridge) at (8.10,1.40)
+  {Confidence\\bridge\\$\mathbf{Z}$};
+\node[routing, minimum width=14mm, minimum height=18mm] (bus) at (9.65,3.00)
+  {Cue routing\\$\Delta,B,E,Z$\\no parameters};
+\node[fusion, minimum width=17mm] (concat) at (11.78,3.00)
+  {Concatenate\\$\mathbf{X}_o,\Delta,B,$\\$E,Z$; $5C$};
+\node[fusion, minimum width=14mm] (fuse) at (12.20,5.05)
+  {$1{\times}1$ Conv\\+ GN\\$5C{\to}C$};
+\node[io, minimum width=11mm] (out) at (12.20,1.05)
+  {GBC\\output};
+
+\draw[flow] (x.north east) -- (entropy.west);
+\draw[flow] (x.east) -- (boundary.west);
+\draw[flow] (x.south east) -- (gap.west);
+\draw[cue] (entropy.east) -- (pack.north west);
+\draw[cue] (boundary.east) -- (pack.west);
+\draw[cue] (gap.east) -- (pack.south west);
+\draw[cue] (pack.north east) -- (summary.south west);
+\draw[flow] (summary) -- (confidence);
+\draw[cue] (confidence) -- (bridge);
+\draw[cue] (pack.east) -- (bus.west);
+\draw[skip] (x.south) -- ++(0,-2.00) -| (bridge.south);
+\draw[cue] (bridge.east) -- (bus.south west);
+\draw[flow] (bus) -- (concat);
+\draw[skip] (x.north) -- ++(0,2.05) -| (concat.north west);
+\draw[flow] (concat.north) -- ++(0,0.35) -| (fuse.west);
+\draw[flow] (fuse.east) -- ++(0.58,0) |- (out.east);
+
+\node[note, anchor=west] at (0.35,0.35)
+  {$\mathbf{C}_g$ is spatial ($1{\times}H{\times}W$) and is broadcast across channels.};
+
+\end{tikzpicture}
+\endgroup

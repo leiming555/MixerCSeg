@@ -13,6 +13,20 @@ from models.layers import HoGEdgeGateConv
 from models.ccem import CrackContinuityEnhancementModule
 from models.edrm import EdgeDetailRecoveryModule
 from models.experimental_modules import ExperimentalEnhancementModule
+from models.experimental_second_modules import SecondExperimentalEnhancementModule
+from models.experimental_third_modules import ThirdExperimentalEnhancementModule
+from models.experimental_paper_stack import PaperStackEnhancementModule
+from models.deg_ridge_scale_gap_interaction import DEGRidgeScaleGapInteractionModule
+from models.rsgdi_v2_modules import RSGDIV2EnhancementModule
+from models.experimental_triple_stack_v3 import TripleStackV3Block
+from models.experimental_triple_stack_v4 import TripleStackV4Block
+from models.experimental_triple_stack_v5 import TripleStackV5Block
+from models.experimental_triple_stack_v6 import TripleStackV6Block
+from models.experimental_triple_stack_v7 import TripleStackV7Block
+from models.experimental_triple_stack_v8 import TripleStackV8Block
+from models.experimental_triple_stack_v9 import TripleStackV9Block
+from models.experimental_triple_stack_v10 import TripleStackV10Block
+from models.experimental_triple_stack_v11 import TripleStackV11Block
 
 from VMamba.models.vmamba import TransMixer
 
@@ -33,24 +47,250 @@ class VSS(nn.Module):
         use_edrm=False,
         use_exp_module=False,
         exp_module_mode="win_attn_strip_gate",
+        use_exp_second_module=False,
+        exp_second_module_mode="soft_morph_gradient_gate",
+        use_exp_third_module=False,
+        exp_third_module_mode="hessian_eigen_bridge_gate",
+        use_paper_stack=False,
+        paper_stack_mode="saf_rgp",
+        use_drsgi=False,
+        drsgi_mode="pre_gate",
+        use_rsgdi_v2=False,
+        rsgdi_v2_mode="topology_bridge_gate",
+        use_triple_stack_v3=False,
+        triple_stack_v3_mode="dsc_htm_gbc",
+        use_triple_stack_v4=False,
+        triple_stack_v4_mode="amc_eov_tgc",
+        use_triple_stack_v5=False,
+        triple_stack_v5_mode="mwr_eoc_upb",
+        use_triple_stack_v6=False,
+        triple_stack_v6_mode="hfr_ert_apb",
+        use_triple_stack_v7=False,
+        triple_stack_v7_mode="rma_mev_dgb",
+        use_triple_stack_v8=False,
+        triple_stack_v8_mode="cwc_lsf_obp",
+        use_triple_stack_v9=False,
+        triple_stack_v9_mode="eub_oeb_prg",
+        use_triple_stack_v10=False,
+        triple_stack_v10_mode="ard_dbr_bpg",
+        use_triple_stack_v11=False,
+        triple_stack_v11_mode="ram_rcv_cgb",
     ):
         super().__init__()
+        if use_triple_stack_v11 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_triple_stack_v6 or use_triple_stack_v7 or use_triple_stack_v8
+            or use_triple_stack_v9 or use_triple_stack_v10 or use_exp_module
+            or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v11 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v10 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_triple_stack_v6 or use_triple_stack_v7 or use_triple_stack_v8
+            or use_triple_stack_v9 or use_exp_module or use_exp_second_module
+            or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v10 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v9 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_triple_stack_v6 or use_triple_stack_v7 or use_triple_stack_v8
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v9 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v8 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_triple_stack_v6 or use_triple_stack_v7
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v8 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v7 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_triple_stack_v6 or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v7 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v6 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v6 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v5 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4
+            or use_triple_stack_v6 or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v5 cannot be combined with other experimental module entries"
+            )
+        if use_triple_stack_v4 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v5
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v4 cannot be combined with other experimental module entries"
+            )
+        if use_rsgdi_v2 and (
+            use_drsgi or use_paper_stack or use_triple_stack_v3
+            or use_triple_stack_v4 or use_triple_stack_v5
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_rsgdi_v2 cannot be combined with use_drsgi/use_paper_stack/use_triple_stack_v3/"
+                "use_exp_module/use_exp_second_module/use_exp_third_module"
+            )
+        if use_drsgi and (
+            use_paper_stack or use_triple_stack_v3
+            or use_triple_stack_v4 or use_triple_stack_v5
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_drsgi cannot be combined with use_paper_stack/use_triple_stack_v3/"
+                "use_exp_module/use_exp_second_module/use_exp_third_module"
+            )
+        if use_paper_stack and (
+            use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_paper_stack cannot be combined with use_triple_stack_v3/use_exp_module/"
+                "use_exp_second_module/use_exp_third_module"
+            )
+        if use_triple_stack_v3 and (
+            use_triple_stack_v4 or use_triple_stack_v5
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v3 cannot be combined with use_exp_module/"
+                "use_exp_second_module/use_exp_third_module"
+            )
+        if use_exp_second_module and (not use_exp_module or exp_module_mode != "scale_adaptive_fusion"):
+            raise ValueError(
+                "use_exp_second_module requires use_exp_module with exp_module_mode='scale_adaptive_fusion'"
+            )
+        if use_exp_third_module and (
+            not use_exp_module
+            or exp_module_mode != "scale_adaptive_fusion"
+            or not use_exp_second_module
+            or exp_second_module_mode != "ridge_hessian_context"
+        ):
+            raise ValueError(
+                "use_exp_third_module requires scale_adaptive_fusion followed by ridge_hessian_context"
+            )
         self.depth = depth
         self.blocks = nn.ModuleList()
         for _ in range(depth):
             layers = [
                 TransMixer(hidden_dim=in_dim, ssm_d_state=state_dim, mlp_ratio=mlp_ratio, channel_first=True),
-                HoGEdgeGateConv(
+            ]
+            if use_triple_stack_v11:
+                layers.append(TripleStackV11Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v11_mode,
+                ))
+            elif use_triple_stack_v10:
+                layers.append(TripleStackV10Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v10_mode,
+                ))
+            elif use_triple_stack_v9:
+                layers.append(TripleStackV9Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v9_mode,
+                ))
+            elif use_triple_stack_v8:
+                layers.append(TripleStackV8Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v8_mode,
+                ))
+            elif use_triple_stack_v7:
+                layers.append(TripleStackV7Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v7_mode,
+                ))
+            elif use_triple_stack_v6:
+                layers.append(TripleStackV6Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v6_mode,
+                ))
+            elif use_triple_stack_v5:
+                layers.append(TripleStackV5Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v5_mode,
+                ))
+            elif use_triple_stack_v4:
+                layers.append(TripleStackV4Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v4_mode,
+                ))
+            elif use_triple_stack_v3:
+                layers.append(TripleStackV3Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v3_mode,
+                ))
+            elif use_drsgi:
+                layers.append(DEGRidgeScaleGapInteractionModule(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=drsgi_mode,
+                ))
+            else:
+                layers.append(HoGEdgeGateConv(
                             in_dim=in_dim,
                             nbins=nbins
-                )
-            ]
+                ))
+            if use_rsgdi_v2:
+                layers.append(RSGDIV2EnhancementModule(
+                    channels=in_dim,
+                    mode=rsgdi_v2_mode,
+                ))
+            if use_paper_stack:
+                layers.append(PaperStackEnhancementModule(
+                    channels=in_dim,
+                    mode=paper_stack_mode,
+                ))
             if use_edrm:
                 layers.append(EdgeDetailRecoveryModule(channels=in_dim))
             if use_exp_module:
                 layers.append(ExperimentalEnhancementModule(
                     channels=in_dim,
                     mode=exp_module_mode,
+                ))
+            if use_exp_second_module:
+                layers.append(SecondExperimentalEnhancementModule(
+                    channels=in_dim,
+                    mode=exp_second_module_mode,
+                ))
+            if use_exp_third_module:
+                layers.append(ThirdExperimentalEnhancementModule(
+                    channels=in_dim,
+                    mode=exp_third_module_mode,
                 ))
             if use_ccem:
                 layers.append(CrackContinuityEnhancementModule(
@@ -84,6 +324,34 @@ class VSSEncoder(nn.Module):
                  edrm_stages="f1",
                  use_exp_module=False,
                  exp_module_mode="win_attn_strip_gate",
+                 use_exp_second_module=False,
+                 exp_second_module_mode="soft_morph_gradient_gate",
+                 use_exp_third_module=False,
+                 exp_third_module_mode="hessian_eigen_bridge_gate",
+                 use_paper_stack=False,
+                 paper_stack_mode="saf_rgp",
+                 use_drsgi=False,
+                 drsgi_mode="pre_gate",
+                 use_rsgdi_v2=False,
+                 rsgdi_v2_mode="topology_bridge_gate",
+                 use_triple_stack_v3=False,
+                 triple_stack_v3_mode="dsc_htm_gbc",
+                 use_triple_stack_v4=False,
+                 triple_stack_v4_mode="amc_eov_tgc",
+                 use_triple_stack_v5=False,
+                 triple_stack_v5_mode="mwr_eoc_upb",
+                 use_triple_stack_v6=False,
+                 triple_stack_v6_mode="hfr_ert_apb",
+                 use_triple_stack_v7=False,
+                 triple_stack_v7_mode="rma_mev_dgb",
+                 use_triple_stack_v8=False,
+                 triple_stack_v8_mode="cwc_lsf_obp",
+                 use_triple_stack_v9=False,
+                 triple_stack_v9_mode="eub_oeb_prg",
+                 use_triple_stack_v10=False,
+                 triple_stack_v10_mode="ard_dbr_bpg",
+                 use_triple_stack_v11=False,
+                 triple_stack_v11_mode="ram_rcv_cgb",
                  ):
         super().__init__()
         if edrm_stages not in {"f1", "f1_f2"}:
@@ -112,7 +380,35 @@ class VSSEncoder(nn.Module):
                       ccem_branch_weight=ccem_branch_weight,
                       use_edrm=stage_use_edrm,
                       use_exp_module=use_exp_module,
-                      exp_module_mode=exp_module_mode)
+                      exp_module_mode=exp_module_mode,
+                      use_exp_second_module=use_exp_second_module,
+                      exp_second_module_mode=exp_second_module_mode,
+                      use_exp_third_module=use_exp_third_module,
+                      exp_third_module_mode=exp_third_module_mode,
+                      use_paper_stack=use_paper_stack,
+                      paper_stack_mode=paper_stack_mode,
+                      use_drsgi=use_drsgi,
+                      drsgi_mode=drsgi_mode,
+                      use_rsgdi_v2=use_rsgdi_v2,
+                      rsgdi_v2_mode=rsgdi_v2_mode,
+                      use_triple_stack_v3=use_triple_stack_v3,
+                      triple_stack_v3_mode=triple_stack_v3_mode,
+                      use_triple_stack_v4=use_triple_stack_v4,
+                      triple_stack_v4_mode=triple_stack_v4_mode,
+                      use_triple_stack_v5=use_triple_stack_v5,
+                      triple_stack_v5_mode=triple_stack_v5_mode,
+                      use_triple_stack_v6=use_triple_stack_v6,
+                      triple_stack_v6_mode=triple_stack_v6_mode,
+                      use_triple_stack_v7=use_triple_stack_v7,
+                      triple_stack_v7_mode=triple_stack_v7_mode,
+                      use_triple_stack_v8=use_triple_stack_v8,
+                      triple_stack_v8_mode=triple_stack_v8_mode,
+                      use_triple_stack_v9=use_triple_stack_v9,
+                      triple_stack_v9_mode=triple_stack_v9_mode,
+                      use_triple_stack_v10=use_triple_stack_v10,
+                      triple_stack_v10_mode=triple_stack_v10_mode,
+                      use_triple_stack_v11=use_triple_stack_v11,
+                      triple_stack_v11_mode=triple_stack_v11_mode)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:

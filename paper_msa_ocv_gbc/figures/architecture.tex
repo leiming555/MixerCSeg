@@ -1,0 +1,61 @@
+\begin{tikzpicture}[
+    font=\sffamily,
+    >=Latex,
+    flow/.style={->, very thick, draw=gray!75!black},
+    residual/.style={->, thick, dashed, draw=orange!80!black},
+    base/.style={draw, rounded corners=2pt, minimum height=11mm, align=center, inner xsep=5pt},
+    io/.style={base, fill=gray!12, draw=gray!65},
+    msa/.style={base, fill=blue!11, draw=blue!65!black},
+    deg/.style={base, fill=gray!18, draw=gray!70!black},
+    ocv/.style={base, fill=green!11, draw=green!50!black},
+    gbc/.style={base, fill=orange!13, draw=orange!70!black},
+    gate/.style={draw, circle, fill=white, inner sep=1.8pt, font=\scriptsize\bfseries},
+    note/.style={draw, rounded corners=2pt, align=left, font=\scriptsize, text width=36mm, inner sep=4pt}
+]
+
+\node[io] (input) {TransMixer\\feature $\mathbf{X}$};
+\node[msa, right=8mm of input] (msa) {MSA};
+\node[gate, right=3mm of msa] (g1) {$\mathcal{G}_1$};
+\node[deg, right=3mm of g1] (deg) {DEGConv};
+\node[ocv, right=8mm of deg] (ocv) {OCV};
+\node[gate, right=3mm of ocv] (g2) {$\mathcal{G}_2$};
+\node[gbc, right=8mm of g2] (gbc) {GBC};
+\node[gate, right=3mm of gbc] (g3) {$\mathcal{G}_3$};
+\node[io, right=8mm of g3] (norm) {GN};
+\node[gate, right=3mm of norm] (gf) {$\mathcal{G}_f$};
+\node[io, right=5mm of gf] (output) {Stage output\\to SRF};
+
+\draw[flow] (input) -- (msa);
+\draw[flow] (msa) -- (g1);
+\draw[flow] (g1) -- (deg);
+\draw[flow] (deg) -- (ocv);
+\draw[flow] (ocv) -- (g2);
+\draw[flow] (g2) -- (gbc);
+\draw[flow] (gbc) -- (g3);
+\draw[flow] (g3) -- (norm);
+\draw[flow] (norm) -- (gf);
+\draw[flow] (gf) -- (output);
+
+\draw[residual] (input.south) to[out=-55,in=-125,looseness=0.65] node[below, font=\scriptsize] {stage-level residual} (gf.south);
+\draw[residual] (input.north east) to[out=45,in=135] (g1.north);
+\draw[residual] (deg.north east) to[out=45,in=135] (g2.north);
+\draw[residual] (g2.south east) to[out=-45,in=-135] (g3.south);
+
+\node[note, fill=blue!5, draw=blue!35!black, below=15mm of msa, xshift=12mm] (msanote) {
+\textbf{Multi-Scale Axial Conditioner}\\
+$1{\times}9$, $9{\times}1$, and dilated axial depthwise convolutions; row/column context and their interaction.
+};
+\node[note, fill=green!5, draw=green!35!black, right=8mm of msanote] (ocvnote) {
+\textbf{Orientation--Curvature Voting}\\
+Sobel gradients and Hessian responses guide horizontal/vertical evidence and suppress high-curvature noise.
+};
+\node[note, fill=orange!6, draw=orange!50!black, right=8mm of ocvnote] (gbcnote) {
+\textbf{Gap--Boundary Confidence}\\
+Local gaps, boundary contrast, and entropy estimate where confidence-guided feature bridging is needed.
+};
+
+\draw[thin, draw=blue!45!black] (msa.south) -- (msanote.north);
+\draw[thin, draw=green!45!black] (ocv.south) -- (ocvnote.north);
+\draw[thin, draw=orange!65!black] (gbc.south) -- (gbcnote.north);
+
+\end{tikzpicture}

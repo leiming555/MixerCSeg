@@ -1,0 +1,145 @@
+% Three readable, implementation-matched panels at the final manuscript scale.
+\begingroup
+\begin{tikzpicture}[
+  font=\sffamily\scriptsize,
+  >=Latex,
+  flow/.style={->, line width=0.72pt, draw=black!68},
+  cue/.style={->, line width=0.72pt, draw=teal!72!black},
+  skip/.style={->, line width=0.72pt, dashed, draw=orange!84!black},
+  panel/.style={draw=black!18, rounded corners=2pt, fill=black!0.5},
+  io/.style={draw=black!42, fill=white, rounded corners=1.5pt,
+    minimum width=13mm, minimum height=9mm, align=center, inner sep=1.1pt},
+  op/.style={rounded corners=1.5pt, minimum height=9mm, align=center,
+    inner sep=1.1pt, line width=0.55pt},
+  msa/.style={op, draw=blue!62!black, fill=blue!6},
+  ocv/.style={op, draw=teal!65!black, fill=teal!6},
+  gbc/.style={op, draw=orange!78!black, fill=orange!9},
+  fixed/.style={op, dashed, draw=black!50, fill=black!3},
+  fusion/.style={op, draw=violet!62!black, fill=violet!6},
+  title/.style={font=\sffamily\footnotesize\bfseries, anchor=west},
+  smallnote/.style={font=\sffamily\scriptsize, text=black!68}
+]
+
+% ------------------------------------------------------------------
+% (a) Multi-Scale Axial Conditioner
+% ------------------------------------------------------------------
+\node[panel, minimum width=155mm, minimum height=43mm, anchor=south west]
+  at (0,9.18) {};
+\node[title, text=blue!68!black] at (0.24,13.12)
+  {(a) Multi-Scale Axial Conditioner (MSA)};
+\node[io] (mx) at (0.82,11.18) {Input\\$\mathbf{X}$};
+\node[msa, minimum width=29mm] (mreg) at (3.05,12.20)
+  {Regular axial DWConv\\$1{\times}9$ and $9{\times}1$};
+\node[msa, minimum width=29mm] (mdil) at (3.05,11.13)
+  {Dilated axial DWConv\\$1{\times}5$ and $5{\times}1$, $d=2$};
+\node[msa, minimum width=29mm] (mctx) at (3.05,10.02)
+  {Global axial means\\$\mathbf{R},\mathbf{C},\mathbf{R}\odot\mathbf{C}$};
+\node[msa, minimum width=18mm] (msum) at (5.75,11.66)
+  {Element sum\\$\mathbf{A}$};
+\node[fusion, minimum width=30mm] (mcat) at (8.45,11.18)
+  {Concatenate\\$[\mathbf{X};\mathbf{A};\mathbf{R};\mathbf{C};\mathbf{R}\odot\mathbf{C}]$\\$5C$ channels};
+\node[fusion, minimum width=20mm] (mfuse) at (11.36,11.18)
+  {$1{\times}1$ Conv + GN\\$5C{\to}C$};
+\node[io, minimum width=18mm] (mout) at (14.20,11.18)
+  {$\mathrm{MSA}(\mathbf{X})$\\$C{\times}H{\times}W$};
+\draw[flow] (mx) -- (mreg.west);
+\draw[flow] (mx) -- (mdil.west);
+\draw[cue] (mx) -- (mctx.west);
+\draw[flow] (mreg.east) -- (msum.west);
+\draw[flow] (mdil.east) -- (msum.west);
+\draw[flow] (msum) -- (mcat);
+\draw[cue] (mctx.east) -| (mcat.south);
+\draw[skip] (mx.north) -- ++(0,1.12) -| (mcat.north);
+\draw[flow] (mcat) -- (mfuse);
+\draw[flow] (mfuse) -- (mout);
+\node[smallnote, anchor=west] at (0.27,9.46)
+  {Each axial branch uses depthwise convolution, group normalization, and SiLU.};
+
+% ------------------------------------------------------------------
+% (b) Orientation--Curvature Voting
+% ------------------------------------------------------------------
+\node[panel, minimum width=155mm, minimum height=43mm, anchor=south west]
+  at (0,4.62) {};
+\node[title, text=teal!70!black] at (0.24,8.56)
+  {(b) Orientation--Curvature Voting (OCV)};
+\node[io] (ox) at (0.82,6.60) {Input\\$\mathbf{X}_d$};
+\node[fixed, minimum width=24mm] (sobel) at (2.75,7.62)
+  {Fixed Sobel\\$\mathbf{g}_x,\mathbf{g}_y \to \mathbf{M}$};
+\node[fixed, minimum width=24mm] (hessian) at (2.75,6.54)
+  {Fixed Hessian\\$\mathbf{D}_{xx},\mathbf{D}_{yy},\mathbf{D}_{xy}$};
+\node[ocv, minimum width=24mm] (axial) at (2.75,5.46)
+  {Learnable axial DWConv\\$1{\times}7$ and $7{\times}1$};
+\node[ocv, minimum width=19mm] (geometry) at (5.25,6.92)
+  {Ridge cues\\$\boldsymbol{\rho},\boldsymbol{\kappa}$};
+\node[ocv, minimum width=19mm] (orient) at (5.25,5.66)
+  {Orientation gate\\$\mathbf{H},\mathbf{V}$};
+\node[ocv, minimum width=18mm] (vote) at (7.40,6.18)
+  {Geometry vote\\$\mathbf{Q}$};
+\node[fusion, minimum width=22mm] (ocat) at (9.55,6.60)
+  {Concatenate\\$[\mathbf{X}_d;\mathbf{M};\rho;\kappa;\mathbf{Q}]$\\$5C$ channels};
+\node[fusion, minimum width=18mm] (ofuse) at (11.85,6.60)
+  {$1{\times}1$ Conv + GN\\$5C{\to}C$};
+\node[io, minimum width=18mm] (oout) at (14.15,6.60)
+  {$\mathrm{OCV}(\mathbf{X}_d)$};
+\draw[flow] (ox) -- (sobel.west);
+\draw[flow] (ox) -- (hessian.west);
+\draw[flow] (ox) -- (axial.west);
+\draw[flow] (hessian.east) -- (geometry.west);
+\draw[flow] (axial.east) -- (orient.west);
+\draw[cue] (sobel.south east) -- (orient.north west);
+\draw[cue] (geometry.east) -- (vote.west);
+\draw[cue] (orient.east) -- (vote.west);
+\draw[flow] (sobel.east) -| (ocat.north);
+\draw[flow] (geometry.east) -- ++(0.18,0) |- (ocat.west);
+\draw[flow] (vote) -- (ocat);
+\draw[skip] (ox.north) -- ++(0,1.30) -| (ocat.north west);
+\draw[flow] (ocat) -- (ofuse);
+\draw[flow] (ofuse) -- (oout);
+\node[smallnote, anchor=west] at (0.27,4.90)
+  {Dashed boxes are fixed differential operators; solid boxes contain learnable parameters.};
+
+% ------------------------------------------------------------------
+% (c) Gap--Boundary Confidence
+% ------------------------------------------------------------------
+\node[panel, minimum width=155mm, minimum height=43mm, anchor=south west]
+  at (0,0.06) {};
+\node[title, text=orange!82!black] at (0.24,4.00)
+  {(c) Gap--Boundary Confidence (GBC)};
+\node[io] (gx) at (0.82,2.05) {Input\\$\mathbf{X}_o$};
+\node[gbc, minimum width=22mm] (entropy) at (2.60,3.05)
+  {Sigmoid + entropy\\$\mathbf{E}$};
+\node[gbc, minimum width=22mm] (boundary) at (2.60,2.00)
+  {$3{\times}3$ local mean\\boundary $\mathbf{B}$};
+\node[gbc, minimum width=22mm] (gap) at (2.60,0.95)
+  {$5{\times}5$ MaxPool\\gap $\boldsymbol{\Delta}$};
+\node[gbc, minimum width=20mm, text width=19mm] (summary) at (4.90,2.05)
+  {Channel reduction\\max $\Delta$, mean $B,E$};
+\node[gbc, minimum width=19mm] (confidence) at (7.05,2.70)
+  {$5{\times}5$ Conv + sigmoid\\confidence $\mathbf{C}_g$};
+\node[gbc, minimum width=20mm] (bridge) at (7.05,1.25)
+  {Confidence bridge\\$\mathbf{Z}$};
+\node[fusion, minimum width=22mm] (gcat) at (9.50,2.05)
+  {Concatenate\\$[\mathbf{X}_o;\Delta;\mathbf{B};\mathbf{E};\mathbf{Z}]$\\$5C$ channels};
+\node[fusion, minimum width=18mm] (gfuse) at (11.85,2.05)
+  {$1{\times}1$ Conv + GN\\$5C{\to}C$};
+\node[io, minimum width=18mm] (gout) at (14.15,2.05)
+  {$\mathrm{GBC}(\mathbf{X}_o)$};
+\draw[flow] (gx) -- (entropy.west);
+\draw[flow] (gx) -- (boundary.west);
+\draw[flow] (gx) -- (gap.west);
+\draw[cue] (entropy.east) -- (summary.west);
+\draw[cue] (boundary.east) -- (summary.west);
+\draw[cue] (gap.east) -- (summary.west);
+\draw[flow] (summary) -- (confidence);
+\draw[cue] (confidence) -- (bridge);
+\draw[cue] (gap.east) -- ++(0.20,0) |- (bridge.west);
+\draw[skip] (gx.south) -- ++(0,-1.02) -| (bridge.south);
+\draw[flow] (bridge) -- (gcat);
+\draw[skip] (gx.north) -- ++(0,1.08) -| (gcat.north west);
+\draw[flow] (gcat) -- (gfuse);
+\draw[flow] (gfuse) -- (gout);
+\node[smallnote, anchor=west] at (0.27,0.32)
+  {The confidence map is spatial ($1{\times}H{\times}W$) and is broadcast across channels.};
+
+\end{tikzpicture}
+\endgroup

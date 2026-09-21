@@ -1,0 +1,139 @@
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    >=Latex,
+    flow/.style={->, thick, draw=gray!75!black},
+    cue/.style={->, thick, draw=teal!65!black},
+    residual/.style={->, thick, dashed, draw=orange!80!black},
+    block/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=23mm,
+        align=center, fill=white, inner sep=2.5pt},
+    op/.style={block, fill=gray!8, draw=gray!65},
+    msa/.style={block, fill=blue!8, draw=blue!60!black},
+    ocv/.style={block, fill=green!8, draw=green!55!black},
+    gbc/.style={block, fill=orange!10, draw=orange!70!black},
+    fusion/.style={block, fill=purple!8, draw=purple!55!black},
+    io/.style={block, fill=gray!5, draw=gray!65, minimum width=18mm},
+    sum/.style={draw, circle, fill=white, inner sep=1.5pt, font=\bfseries},
+    panel/.style={draw, rounded corners=3pt, very thick, inner sep=4pt}
+]
+
+% ------------------------------------------------------------------
+% (a) MSA
+% ------------------------------------------------------------------
+\node[font=\small\bfseries, anchor=west, text=blue!65!black] at (-0.2,2.7)
+{(a) Multi-Scale Axial Conditioner (MSA)};
+\node[io] (mx) at (0.8,0.2) {Input $\mathbf{X}$\\$C\!\times\!H\!\times\!W$};
+\node[msa] (mh)  at (4.0,2.0) {DWConv $1{\times}9$\\GN + SiLU};
+\node[msa] (mv)  at (4.0,0.9) {DWConv $9{\times}1$\\GN + SiLU};
+\node[msa] (mdh) at (4.0,-0.2) {DWConv $1{\times}5$\\dilation $(1,2)$};
+\node[msa] (mdv) at (4.0,-1.3) {DWConv $5{\times}1$\\dilation $(2,1)$};
+\node[sum] (msum) at (7.0,0.35) {$+$};
+\node[msa] (ma) at (9.1,0.35) {Axial response\\$\mathbf{A}$};
+\node[msa] (mr) at (4.0,-2.45) {Row mean\\$\mathbf{R}=\mathrm{mean}_{W}(\mathbf{X})$};
+\node[msa] (mc) at (7.0,-2.45) {Column mean\\$\mathbf{C}=\mathrm{mean}_{H}(\mathbf{X})$};
+\node[msa] (mrc) at (10.0,-2.45) {Context interaction\\$\mathbf{R}\odot\mathbf{C}$};
+\node[fusion] (mcat) at (13.1,0.1) {Concatenate\\$[\mathbf{X};\mathbf{A};\mathbf{R};\mathbf{C};\mathbf{R}\odot\mathbf{C}]$\\$5C$ channels};
+\node[fusion] (mfuse) at (16.2,0.1) {$1{\times}1$ Conv\\$5C{\rightarrow}C$ + GN};
+\node[io] (mout) at (19.0,0.1) {$\mathrm{MSA}(\mathbf{X})$\\$C\!\times\!H\!\times\!W$};
+
+\foreach \n in {mh,mv,mdh,mdv}{\draw[flow] (mx.east) -- (\n.west);}
+\foreach \n in {mh,mv,mdh,mdv}{\draw[flow] (\n.east) -- (msum.west);}
+\draw[flow] (msum) -- (ma);
+\draw[cue] (mx.south) |- (mr.west);
+\draw[cue] (mx.south) |- (mc.west);
+\draw[cue] (mr) -- (mrc);
+\draw[cue] (mc) -- (mrc);
+\draw[flow] (ma) -- (mcat);
+\draw[cue] (mr.east) -| (mcat.south west);
+\draw[cue] (mc.east) -| (mcat.south);
+\draw[cue] (mrc.east) -| (mcat.south east);
+\draw[residual] (mx.north) |- (mcat.north);
+\draw[flow] (mcat) -- (mfuse);
+\draw[flow] (mfuse) -- (mout);
+
+% ------------------------------------------------------------------
+% (b) OCV
+% ------------------------------------------------------------------
+\begin{scope}[yshift=-6.5cm]
+\node[font=\small\bfseries, anchor=west, text=green!50!black] at (-0.2,2.4)
+{(b) Orientation--Curvature Voting (OCV)};
+\node[io] (ox) at (0.8,0) {Input $\mathbf{X}_{d}$\\after DEGConv};
+\node[ocv] (sobel) at (4.0,1.55) {Fixed Sobel filters\\$\mathbf{g}_{x},\mathbf{g}_{y}$};
+\node[ocv] (mag) at (7.2,1.55) {Gradient magnitude\\$\mathbf{M}=\sqrt{g_x^2+g_y^2}$};
+\node[ocv] (hessian) at (4.0,0) {Fixed Hessian filters\\$\mathbf{D}_{xx},\mathbf{D}_{yy},\mathbf{D}_{xy}$};
+\node[ocv] (geom) at (7.2,0) {Ridge $\boldsymbol{\rho}$\\Curvature $\boldsymbol{\kappa}$};
+\node[ocv] (axial) at (4.0,-1.55) {DWConv $1{\times}7$, $7{\times}1$\\GN + SiLU};
+\node[ocv] (orient) at (7.2,-1.55) {Orientation weights\\$\mathbf{H},\mathbf{V}$};
+\node[ocv] (vote) at (10.4,-0.75) {Geometry vote\\$\mathbf{Q}=\sigma(\rho-\kappa)\odot(\mathbf{H}+\mathbf{V})$};
+\node[fusion] (ocat) at (13.7,0) {Concatenate\\$[\mathbf{X}_{d};\mathbf{M};\boldsymbol{\rho};\boldsymbol{\kappa};\mathbf{Q}]$\\$5C$ channels};
+\node[fusion] (ofuse) at (16.7,0) {$1{\times}1$ Conv\\$5C{\rightarrow}C$ + GN};
+\node[io] (oout) at (19.4,0) {$\mathrm{OCV}(\mathbf{X}_{d})$\\$C\!\times\!H\!\times\!W$};
+
+\foreach \n in {sobel,hessian,axial}{\draw[flow] (ox.east) -- (\n.west);}
+\draw[flow] (sobel) -- (mag);
+\draw[flow] (hessian) -- (geom);
+\draw[flow] (axial) -- (orient);
+\draw[cue] (sobel.south east) -- (orient.north west);
+\draw[flow] (geom) -- (vote);
+\draw[flow] (orient) -- (vote);
+\draw[flow] (mag.east) -| (ocat.north west);
+\draw[flow] (geom.east) -- (ocat.west);
+\draw[flow] (vote.east) -| (ocat.south west);
+\draw[residual] (ox.north) |- (ocat.north);
+\draw[flow] (ocat) -- (ofuse);
+\draw[flow] (ofuse) -- (oout);
+\end{scope}
+
+% ------------------------------------------------------------------
+% (c) GBC
+% ------------------------------------------------------------------
+\begin{scope}[yshift=-12.7cm]
+\node[font=\small\bfseries, anchor=west, text=orange!75!black] at (-0.2,2.4)
+{(c) Gap--Boundary Confidence (GBC)};
+\node[io] (gx) at (0.8,0) {Input $\mathbf{X}_{o}$\\after OCV};
+\node[gbc] (ent) at (4.0,1.55) {Sigmoid + entropy\\$\mathbf{E}$};
+\node[gbc] (mean) at (4.0,0) {$3{\times}3$ AvgPool\\$\mathbf{B}=|\mathbf{X}_{o}-\bar{\mathbf{X}}_{o}|$};
+\node[gbc] (gap) at (4.0,-1.55) {$5{\times}5$ MaxPool\\$\boldsymbol{\Delta}=\mathrm{ReLU}(\mathrm{MaxPool}-\mathbf{X}_{o})$};
+\node[gbc] (reduce) at (8.0,0) {Channel summaries\\$[\max_c\boldsymbol{\Delta};\,\mathrm{mean}_c\mathbf{B};\,\mathrm{mean}_c\mathbf{E}]$};
+\node[gbc] (conf) at (11.3,0) {$5{\times}5$ Conv + sigmoid\\confidence $\mathbf{C}_{g}$};
+\node[gbc] (bridge) at (14.4,-0.8) {Confidence bridge\\$\mathbf{Z}=\mathbf{X}_{o}(1-\mathbf{C}_{g})+\boldsymbol{\Delta}\mathbf{C}_{g}$};
+\node[fusion] (gcat) at (17.7,0) {Concatenate\\$[\mathbf{X}_{o};\boldsymbol{\Delta};\mathbf{B};\mathbf{E};\mathbf{Z}]$\\$5C$ channels};
+\node[fusion] (gfuse) at (20.8,0) {$1{\times}1$ Conv\\$5C{\rightarrow}C$ + GN};
+\node[io] (gout) at (23.6,0) {$\mathrm{GBC}(\mathbf{X}_{o})$\\$C\!\times\!H\!\times\!W$};
+
+\foreach \n in {ent,mean,gap}{\draw[flow] (gx.east) -- (\n.west);}
+\foreach \n in {ent,mean,gap}{\draw[cue] (\n.east) -- (reduce.west);}
+\draw[flow] (reduce) -- (conf);
+\draw[flow] (conf) -- (bridge);
+\draw[cue] (gap.east) -| (bridge.south);
+\draw[residual] (gx.south) |- (bridge.west);
+\draw[flow] (bridge) -- (gcat);
+\draw[cue] (ent.east) -| (gcat.north west);
+\draw[cue] (mean.east) -| (gcat.north);
+\draw[cue] (gap.east) -| (gcat.south west);
+\draw[residual] (gx.north) |- (gcat.north);
+\draw[flow] (gcat) -- (gfuse);
+\draw[flow] (gfuse) -- (gout);
+\end{scope}
+
+% ------------------------------------------------------------------
+% (d) Shared gated residual integration
+% ------------------------------------------------------------------
+\begin{scope}[yshift=-17.4cm]
+\node[font=\small\bfseries, anchor=west, text=purple!65!black] at (-0.2,1.15)
+{(d) Shared feature-dependent residual gate $\mathcal{G}$};
+\node[io] (ra) at (1.2,0) {Input $\mathbf{A}$};
+\node[op] (rf) at (4.1,0) {Refinement\\$f(\mathbf{A})$};
+\node[fusion] (rcat) at (7.1,0) {Concatenate\\$[\mathbf{A};f(\mathbf{A})]$};
+\node[fusion] (rw) at (10.1,0) {$1{\times}1$ Conv + sigmoid\\$\mathbf{W}_{f}$};
+\node[fusion, minimum width=65mm] (rout) at (15.6,0)
+{$\mathcal{G}(\mathbf{A},f;\gamma_f)=\mathbf{A}+\gamma_f\mathbf{W}_{f}\odot(f(\mathbf{A})-\mathbf{A})$};
+\draw[flow] (ra) -- (rf);
+\draw[flow] (rf) -- (rcat);
+\draw[residual] (ra.north) |- (rcat.north);
+\draw[flow] (rcat) -- (rw);
+\draw[flow] (rw) -- (rout);
+\draw[residual] (ra.south) |- (rout.south);
+\draw[residual] (rf.south) |- (rout.south west);
+\end{scope}
+
+\end{tikzpicture}
