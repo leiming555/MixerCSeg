@@ -27,6 +27,7 @@ from models.experimental_triple_stack_v8 import TripleStackV8Block
 from models.experimental_triple_stack_v9 import TripleStackV9Block
 from models.experimental_triple_stack_v10 import TripleStackV10Block
 from models.experimental_triple_stack_v11 import TripleStackV11Block
+from models.experimental_triple_stack_v12 import TripleStackV12Block
 
 from VMamba.models.vmamba import TransMixer
 
@@ -75,8 +76,20 @@ class VSS(nn.Module):
         triple_stack_v10_mode="ard_dbr_bpg",
         use_triple_stack_v11=False,
         triple_stack_v11_mode="ram_rcv_cgb",
+        use_triple_stack_v12=False,
+        triple_stack_v12_mode="ase_cpa_pgg",
     ):
         super().__init__()
+        if use_triple_stack_v12 and (
+            use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
+            or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
+            or use_triple_stack_v6 or use_triple_stack_v7 or use_triple_stack_v8
+            or use_triple_stack_v9 or use_triple_stack_v10 or use_triple_stack_v11
+            or use_exp_module or use_exp_second_module or use_exp_third_module
+        ):
+            raise ValueError(
+                "use_triple_stack_v12 cannot be combined with other experimental module entries"
+            )
         if use_triple_stack_v11 and (
             use_ccem or use_edrm or use_drsgi or use_paper_stack or use_rsgdi_v2
             or use_triple_stack_v3 or use_triple_stack_v4 or use_triple_stack_v5
@@ -200,7 +213,13 @@ class VSS(nn.Module):
             layers = [
                 TransMixer(hidden_dim=in_dim, ssm_d_state=state_dim, mlp_ratio=mlp_ratio, channel_first=True),
             ]
-            if use_triple_stack_v11:
+            if use_triple_stack_v12:
+                layers.append(TripleStackV12Block(
+                    channels=in_dim,
+                    nbins=nbins,
+                    mode=triple_stack_v12_mode,
+                ))
+            elif use_triple_stack_v11:
                 layers.append(TripleStackV11Block(
                     channels=in_dim,
                     nbins=nbins,
@@ -352,6 +371,8 @@ class VSSEncoder(nn.Module):
                  triple_stack_v10_mode="ard_dbr_bpg",
                  use_triple_stack_v11=False,
                  triple_stack_v11_mode="ram_rcv_cgb",
+                 use_triple_stack_v12=False,
+                 triple_stack_v12_mode="ase_cpa_pgg",
                  ):
         super().__init__()
         if edrm_stages not in {"f1", "f1_f2"}:
@@ -408,7 +429,9 @@ class VSSEncoder(nn.Module):
                       use_triple_stack_v10=use_triple_stack_v10,
                       triple_stack_v10_mode=triple_stack_v10_mode,
                       use_triple_stack_v11=use_triple_stack_v11,
-                      triple_stack_v11_mode=triple_stack_v11_mode)
+                      triple_stack_v11_mode=triple_stack_v11_mode,
+                      use_triple_stack_v12=use_triple_stack_v12,
+                      triple_stack_v12_mode=triple_stack_v12_mode)
             self.vss_layers.append(vss)
 
             if i_layer < self.num_layers - 1:

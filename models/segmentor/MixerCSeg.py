@@ -122,6 +122,8 @@ def build_MixerCSeg(args):
         triple_stack_v10_mode=getattr(args, 'triple_stack_v10_mode', 'ard_dbr_bpg'),
         use_triple_stack_v11=getattr(args, 'use_triple_stack_v11', False),
         triple_stack_v11_mode=getattr(args, 'triple_stack_v11_mode', 'ram_rcv_cgb'),
+        use_triple_stack_v12=getattr(args, 'use_triple_stack_v12', False),
+        triple_stack_v12_mode=getattr(args, 'triple_stack_v12_mode', 'ase_cpa_pgg'),
         )
     model = MixerCSeg(backbone, embed_dim, args).to(device)
 

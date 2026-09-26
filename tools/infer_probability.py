@@ -73,6 +73,8 @@ CHECKPOINT_ARG_NAMES = [
     "triple_stack_v10_mode",
     "use_triple_stack_v11",
     "triple_stack_v11_mode",
+    "use_triple_stack_v12",
+    "triple_stack_v12_mode",
     "dataset_mode",
     "load_width",
     "load_height",

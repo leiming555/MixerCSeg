@@ -31,6 +31,7 @@ from models.experimental_triple_stack_v8 import TRIPLE_STACK_V8_MODES
 from models.experimental_triple_stack_v9 import TRIPLE_STACK_V9_MODES
 from models.experimental_triple_stack_v10 import TRIPLE_STACK_V10_MODES
 from models.experimental_triple_stack_v11 import TRIPLE_STACK_V11_MODES
+from models.experimental_triple_stack_v12 import TRIPLE_STACK_V12_MODES
 
 # from torch.utils.tensorboard import SummaryWriter
 
@@ -167,6 +168,11 @@ def get_args_parser():
     parser.add_argument('--triple_stack_v11_mode', default='ram_rcv_cgb', type=str,
                         choices=TRIPLE_STACK_V11_MODES,
                         help='TripleStack-v11 mode')
+    parser.add_argument('--use_triple_stack_v12', action='store_true',
+                        help='Enable parallel-evidence TripleStack-v12 around DEGConv')
+    parser.add_argument('--triple_stack_v12_mode', default='ase_cpa_pgg', type=str,
+                        choices=TRIPLE_STACK_V12_MODES,
+                        help='TripleStack-v12 mode')
     parser.add_argument('--dataset_path', default="/home/linux/code/sod/dataset/CrackMap",
                         help='Root directory path for dataset')
     parser.add_argument('--batch_size_train', type=int, default=1,
@@ -210,6 +216,19 @@ def get_args_parser():
     return parser
 
 def main(args):
+    if args.use_triple_stack_v12 and (
+        args.use_ccem or args.use_tversky or args.use_boundary_loss or args.use_edrm
+        or args.use_paper_stack or args.use_drsgi or args.use_rsgdi_v2
+        or args.use_triple_stack_v3 or args.use_triple_stack_v4
+        or args.use_triple_stack_v5 or args.use_triple_stack_v6
+        or args.use_triple_stack_v7 or args.use_triple_stack_v8
+        or args.use_triple_stack_v9 or args.use_triple_stack_v10
+        or args.use_triple_stack_v11 or args.use_exp_module
+        or args.use_exp_second_module or args.use_exp_third_module
+    ):
+        raise ValueError(
+            "use_triple_stack_v12 cannot be combined with other experimental module entries"
+        )
     if args.use_triple_stack_v11 and (
         args.use_ccem or args.use_tversky or args.use_boundary_loss or args.use_edrm
         or args.use_paper_stack or args.use_drsgi or args.use_rsgdi_v2
@@ -371,6 +390,8 @@ def main(args):
         experiment_name = f'{experiment_name}_triple_stack_v10_{args.triple_stack_v10_mode}'
     if args.use_triple_stack_v11:
         experiment_name = f'{experiment_name}_triple_stack_v11_{args.triple_stack_v11_mode}'
+    if args.use_triple_stack_v12:
+        experiment_name = f'{experiment_name}_triple_stack_v12_{args.triple_stack_v12_mode}'
     if args.use_exp_module:
         experiment_name = f'{experiment_name}_exp_{args.exp_module_mode}'
     if args.use_exp_second_module:
@@ -440,6 +461,8 @@ def main(args):
     log_train.info("args: triple_stack_v10_mode -> " + str(args.triple_stack_v10_mode))
     log_train.info("args: use_triple_stack_v11 -> " + str(args.use_triple_stack_v11))
     log_train.info("args: triple_stack_v11_mode -> " + str(args.triple_stack_v11_mode))
+    log_train.info("args: use_triple_stack_v12 -> " + str(args.use_triple_stack_v12))
+    log_train.info("args: triple_stack_v12_mode -> " + str(args.triple_stack_v12_mode))
     print("args: BCELoss_ratio -> " + str(args.BCELoss_ratio))
     print("args: DiceLoss_ratio -> " + str(args.DiceLoss_ratio))
     print("args: use_tversky -> " + str(args.use_tversky))
@@ -488,6 +511,8 @@ def main(args):
     print("args: triple_stack_v10_mode -> " + str(args.triple_stack_v10_mode))
     print("args: use_triple_stack_v11 -> " + str(args.use_triple_stack_v11))
     print("args: triple_stack_v11_mode -> " + str(args.triple_stack_v11_mode))
+    print("args: use_triple_stack_v12 -> " + str(args.use_triple_stack_v12))
+    print("args: triple_stack_v12_mode -> " + str(args.triple_stack_v12_mode))
 
     device = torch.device(args.device)
     seed = args.seed + utils.get_rank()

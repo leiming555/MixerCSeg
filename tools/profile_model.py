@@ -27,6 +27,7 @@ from models.experimental_triple_stack_v8 import TRIPLE_STACK_V8_MODES  # noqa: E
 from models.experimental_triple_stack_v9 import TRIPLE_STACK_V9_MODES  # noqa: E402
 from models.experimental_triple_stack_v10 import TRIPLE_STACK_V10_MODES  # noqa: E402
 from models.experimental_triple_stack_v11 import TRIPLE_STACK_V11_MODES  # noqa: E402
+from models.experimental_triple_stack_v12 import TRIPLE_STACK_V12_MODES  # noqa: E402
 
 
 def get_args():
@@ -115,6 +116,11 @@ def get_args():
     parser.add_argument('--triple_stack_v11_mode', default='ram_rcv_cgb', type=str,
                         choices=TRIPLE_STACK_V11_MODES,
                         help='TripleStack-v11 mode')
+    parser.add_argument('--use_triple_stack_v12', action='store_true',
+                        help='Enable parallel-evidence TripleStack-v12 around DEGConv')
+    parser.add_argument('--triple_stack_v12_mode', default='ase_cpa_pgg', type=str,
+                        choices=TRIPLE_STACK_V12_MODES,
+                        help='TripleStack-v12 mode')
     parser.add_argument('--input_size', default=512, type=int,
                         help='Input image size, using square input')
     parser.add_argument('--batch_size', default=1, type=int,
@@ -164,6 +170,8 @@ def build_profile_args(args, device):
         triple_stack_v10_mode=args.triple_stack_v10_mode,
         use_triple_stack_v11=args.use_triple_stack_v11,
         triple_stack_v11_mode=args.triple_stack_v11_mode,
+        use_triple_stack_v12=args.use_triple_stack_v12,
+        triple_stack_v12_mode=args.triple_stack_v12_mode,
         dataset_path=args.dataset_path,
         device=device,
         load_width=args.input_size,
@@ -258,6 +266,8 @@ def print_results(args, params_m, flops_g, size_mb, fps, latency_ms, peak_memory
         mode = f'{mode}_triple_stack_v10_{args.triple_stack_v10_mode}'
     if args.use_triple_stack_v11:
         mode = f'{mode}_triple_stack_v11_{args.triple_stack_v11_mode}'
+    if args.use_triple_stack_v12:
+        mode = f'{mode}_triple_stack_v12_{args.triple_stack_v12_mode}'
 
     print('\n================ MixerCSeg Profile ================')
     print(f'Dataset      : {dataset_name}')
@@ -294,6 +304,8 @@ def print_results(args, params_m, flops_g, size_mb, fps, latency_ms, peak_memory
     print(f'TripleStack-v10 mode   : {args.triple_stack_v10_mode}')
     print(f'TripleStack-v11 enabled: {args.use_triple_stack_v11}')
     print(f'TripleStack-v11 mode   : {args.triple_stack_v11_mode}')
+    print(f'TripleStack-v12 enabled: {args.use_triple_stack_v12}')
+    print(f'TripleStack-v12 mode   : {args.triple_stack_v12_mode}')
     print(f'Input        : {args.batch_size} x 3 x {args.input_size} x {args.input_size}')
     print(f'NBINS        : {args.nbins}')
     print('---------------------------------------------------')
